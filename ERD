@@ -38,7 +38,7 @@ Table theatre {
   stagepracat char
   stagedresat char
   stageoutdrat char
-  disabledseatsacle char
+  disabledseatscale char
 }
 
 Table venue {

@@ -33,7 +33,7 @@ export async function GET(
       // theatre: 공연홀 목록 (theatre.venueid → venuedetail.venueid)
       supabase
         .from("theatre")
-        .select("theatreid, theatrenm, seatscale, stageorchat, stagepracat, stagedresat, stageoutdrat, disabledseatsacle")
+        .select("theatreid, theatrenm, seatscale, stageorchat, stagepracat, stagedresat, stageoutdrat, disabledseatscale")
         .eq("venueid", id),
     ]);
 
@@ -72,7 +72,7 @@ export async function GET(
         stagepracat: t.stagepracat,
         stagedresat: t.stagedresat,
         stageoutdrat: t.stageoutdrat,
-        disabledseatsacle: t.disabledseatsacle,
+        disabledseatscale: t.disabledseatscale,
       })),
     };
 

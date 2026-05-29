@@ -45,7 +45,7 @@ export interface TheatreInfo {
   stagepracat: string | null;   // 프로세니엄 무대
   stagedresat: string | null;   // 드레서 무대
   stageoutdrat: string | null;  // 야외 무대
-  disabledseatsacle: string | null;
+  disabledseatscale: string | null;
 }
 
 /** 공연장 상세 (venue + venuedetail + theatre 통합) */

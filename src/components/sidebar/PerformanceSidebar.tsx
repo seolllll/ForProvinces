@@ -131,9 +131,9 @@ export default function PerformanceSidebar() {
                             ))}
                           </div>
                         )}
-                        {t.disabledseatsacle && t.disabledseatsacle !== "0" && (
+                        {t.disabledseatscale && t.disabledseatscale !== "0" && (
                           <p className="mt-1.5 text-xs text-muted-foreground">
-                            장애인석 {t.disabledseatsacle}석
+                            장애인석 {t.disabledseatscale}석
                           </p>
                         )}
                       </li>

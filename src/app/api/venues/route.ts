@@ -10,10 +10,10 @@ import type { VenueMarker, ApiResponse } from "@/types";
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
 
-  const swLat = parseFloat(searchParams.get("swLat") ?? "0");
-  const swLng = parseFloat(searchParams.get("swLng") ?? "0");
-  const neLat = parseFloat(searchParams.get("neLat") ?? "0");
-  const neLng = parseFloat(searchParams.get("neLng") ?? "0");
+  const swLat = parseFloat(searchParams.get("swLat") ?? "0.0");
+  const swLng = parseFloat(searchParams.get("swLng") ?? "0.0");
+  const neLat = parseFloat(searchParams.get("neLat") ?? "0.0");
+  const neLng = parseFloat(searchParams.get("neLng") ?? "0.0");
 
   if ([swLat, swLng, neLat, neLng].some(isNaN)) {
     return NextResponse.json<ApiResponse<null>>(
@@ -26,14 +26,13 @@ export async function GET(req: NextRequest) {
     // ── 1. bounds 내 venuedetail 조회 (좌표 기준) ──
     const { data: details, error: detailsError } = await supabase
       .from("venuedetail")
-      .select("venueid,la,lo")
+      .select("*")
       .gte("la", swLat)
       .lte("la", neLat)
       .gte("lo", swLng)
       .lte("lo", neLng);
 
     if (detailsError) {
-      console.error("[venues] venuedetail query error:", detailsError);
       throw detailsError;
     }
     if (!details?.length) {
