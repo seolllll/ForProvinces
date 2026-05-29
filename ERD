@@ -1,0 +1,68 @@
+Table prfm {
+  pfrmid text
+  pfrmnm text
+  pfrmfrom text
+  pfrmto text
+  venuenm text
+  posterurl text
+  genrenm text
+  state text
+}
+
+Table prfmdetail {
+  prfmid text
+  venueid text
+  theatreid text
+  prfmcast text
+  runtime text
+  viewage text
+  entrpsnm text
+  entrpsnmp text
+  entrpsnma text
+  entrpsnmh text
+  entrpsnms text
+  pcseguidance text
+  visit char
+  child char
+  daehakro char
+  openrun char
+  festival char
+}
+
+Table theatre {
+  theatreid text
+  venueid text
+  theatrenm text
+  seatscale text
+  stageorchat char
+  stagepracat char
+  stagedresat char
+  stageoutdrat char
+  disabledseatsacle char
+}
+
+Table venue {
+  venueid text
+  venuenm text
+  venuecnt text
+  sidonm text
+  gugunnm text
+}
+
+Table venuedetail {
+  venueid text
+  opende text
+  seatscale text
+  adres text
+  la float
+  lo float
+}
+
+Ref: "prfmdetail"."prfmid" < "prfm"."pfrmid"
+
+
+Ref: "venuedetail"."venueid" < "venue"."venueid"
+
+Ref: "theatre"."venueid" < "venuedetail"."venueid"
+
+Ref: "prfmdetail"."venueid" < "venue"."venueid"
