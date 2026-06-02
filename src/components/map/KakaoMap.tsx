@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback } from "react";
 import Script from "next/script";
 import { useMapStore } from "@/store/mapStore";
-import { debounce } from "@/lib/utils";
 import type { VenueMarker, MapBounds } from "@/types";
+import markerImg from "@/images/marker.png";
 
 // ─────────────────────────────────────────
 // Kakao Maps SDK 최소 타입 선언
@@ -18,6 +18,8 @@ declare global {
         LatLng: new (lat: number, lng: number) => KakaoLatLng;
         MarkerClusterer: new (opts: object) => KakaoClusterer;
         Marker: new (opts: object) => KakaoMarker;
+        MarkerImage: new (src: string, size: KakaoSize) => KakaoMarkerImage;
+        Size: new (width: number, height: number) => KakaoSize;
         event: {
           addListener: (target: object, type: string, cb: () => void) => void;
         };
@@ -44,6 +46,8 @@ interface KakaoClusterer {
 interface KakaoMarker {
   setMap?: (map: KakaoMapInstance | null) => void;
 }
+interface KakaoMarkerImage {}
+interface KakaoSize {}
 
 // ─────────────────────────────────────────
 // KakaoMap 컴포넌트
@@ -54,45 +58,6 @@ export default function KakaoMap() {
   const clustererRef = useRef<KakaoClusterer | null>(null);
 
   const { setBounds, setVenueMarkers, selectVenue } = useMapStore();
-
-  // ── 마커 fetch + 렌더 ─────────────────
-  const fetchAndRenderMarkers = useCallback(
-    async (bounds: MapBounds) => {
-      const params = new URLSearchParams({
-        swLat: String(bounds.swLat),
-        swLng: String(bounds.swLng),
-        neLat: String(bounds.neLat),
-        neLng: String(bounds.neLng),
-      });
-
-      try {
-        const res = await fetch(`/api/venues?${params}`);
-        const json = await res.json();
-        const markers: VenueMarker[] = json.data ?? [];
-        setVenueMarkers(markers);
-
-        if (!clustererRef.current) return;
-        clustererRef.current.clear();
-
-        const { Marker, LatLng, event } = window.kakao.maps;
-        const kakaoMarkers = markers.map((v) => {
-          const marker = new Marker({ position: new LatLng(v.latitude, v.longitude) });
-          event.addListener(marker, "click", () => selectVenue(v.id));
-          return marker;
-        });
-        clustererRef.current.addMarkers(kakaoMarkers);
-      } catch (e) {
-        console.error("[KakaoMap] 마커 fetch 실패:", e);
-      }
-    },
-    [setVenueMarkers, selectVenue]
-  );
-
-  // 디바운스 래퍼 — bounds_changed 과호출 방지
-  const debouncedFetch = useRef(debounce(fetchAndRenderMarkers, 400));
-  useEffect(() => {
-    debouncedFetch.current = debounce(fetchAndRenderMarkers, 400);
-  }, [fetchAndRenderMarkers]);
 
   // ── SDK 로드 완료 시 지도 초기화 ──────
   // autoload=false: kakao 객체만 준비, maps.load() 콜백 안에서만 생성자 사용 가능
@@ -105,7 +70,7 @@ export default function KakaoMap() {
     }
 
     window.kakao.maps.load(() => {
-      const { Map, LatLng, MarkerClusterer } = window.kakao.maps;
+      const { Map, LatLng, MarkerClusterer, Marker, MarkerImage, Size, event } = window.kakao.maps;
 
       const map = new Map(containerRef.current!, {
         center: new LatLng(36.5, 127.8), // 전국 중심
@@ -135,6 +100,29 @@ export default function KakaoMap() {
       mapRef.current = map;
       clustererRef.current = clusterer;
 
+      // ── 마커 전체를 1회 fetch → 클러스터러에 등록 ──────────────────
+      // bounds_changed마다 재요청하면 뷰마다 마커 세트가 바뀌어 클러스터 값이 불일치함.
+      // 공연중 공연장은 수백 건 수준이므로 전체를 한 번에 받아 클러스터러가 직접 처리.
+      fetch("/api/venues")
+        .then((r) => r.json())
+        .then((json) => {
+          const markers: VenueMarker[] = json.data ?? [];
+          setVenueMarkers(markers);
+
+          const markerImage = new MarkerImage(markerImg.src, new Size(65, 35));
+          const kakaoMarkers = markers.map((v) => {
+            const marker = new Marker({
+              position: new LatLng(v.latitude, v.longitude),
+              image: markerImage,
+            });
+            event.addListener(marker, "click", () => selectVenue(v.id));
+            return marker;
+          });
+          clusterer.addMarkers(kakaoMarkers);
+        })
+        .catch((e) => console.error("[KakaoMap] 마커 fetch 실패:", e));
+
+      // ── bounds_changed: 사이드바용 bounds 추적만 담당 ──
       const handleBoundsChange = () => {
         const b = map.getBounds();
         const sw = b.getSouthWest();
@@ -146,13 +134,12 @@ export default function KakaoMap() {
           neLng: ne.getLng(),
         };
         setBounds(bounds);
-        debouncedFetch.current(bounds);
       };
 
-      window.kakao.maps.event.addListener(map, "bounds_changed", handleBoundsChange);
+      event.addListener(map, "bounds_changed", handleBoundsChange);
       handleBoundsChange();
     });
-  }, [setBounds]);
+  }, [setBounds, setVenueMarkers, selectVenue]);
 
   return (
     <>

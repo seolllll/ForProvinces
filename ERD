@@ -27,6 +27,7 @@ Table prfmdetail {
   daehakro char
   openrun char
   festival char
+  crdt date
 }
 
 Table theatre {
@@ -39,6 +40,7 @@ Table theatre {
   stagedresat char
   stageoutdrat char
   disabledseatscale char
+  crdt date
 }
 
 Table venue {
@@ -47,6 +49,7 @@ Table venue {
   venuecnt text
   sidonm text
   gugunnm text
+  crdt date
 }
 
 Table venuedetail {
@@ -56,6 +59,7 @@ Table venuedetail {
   adres text
   la float
   lo float
+  crdt date
 }
 
 Ref: "prfmdetail"."prfmid" < "prfm"."pfrmid"
