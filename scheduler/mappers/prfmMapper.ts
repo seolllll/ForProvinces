@@ -10,6 +10,6 @@ export function mapPrfm(db: KopisPrfmDb): PrfmRow {
     posterurl: db.poster,
     genrenm: db.genrenm,
     state: db.prfstate,
-    crdt: new Date().toISOString(),
+    crdt: new Date().toISOString().slice(0, 10),
   };
 }

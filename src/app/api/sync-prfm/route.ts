@@ -112,13 +112,13 @@ interface PrfmListDb {
   prfstate: string;
 }
 
-async function collectPrfm(): Promise<{ count: number; errors: number }> {
+async function collectPrfm(afterdate: string): Promise<{ count: number; errors: number }> {
   let cpage = 1;
   let count = 0;
   let errors = 0;
   const now = new Date().toISOString();
 
-  console.log("[sync-prfm] prfm 목록 수집 시작");
+  console.log(`[sync-prfm] prfm 목록 수집 시작 (afterdate: ${afterdate})`);
 
   while (true) {
     const url =
@@ -127,7 +127,8 @@ async function collectPrfm(): Promise<{ count: number; errors: number }> {
       `&stdate=${getYearAgo()}` +
       `&eddate=${getYearLater()}` +
       `&cpage=${cpage}` +
-      `&rows=${PAGE_SIZE}`;
+      `&rows=${PAGE_SIZE}` +
+      `&afterdate=${afterdate}`;
 
     const xml = await fetchXmlText(url);
     const parsed = xmlParser.parse(xml);
@@ -287,10 +288,17 @@ async function collectPrfmDetails(): Promise<{
 
 // ── POST /api/sync-prfm ───────────────────────────────────────────────────────
 
-export async function POST() {
-  console.log("[sync-prfm] ===== 공연 데이터 수집 시작 =====");
+interface SyncPrfmRequest {
+  afterdate?: string;
+}
+
+export async function POST(req: Request) {
+  const body: SyncPrfmRequest = await req.json().catch(() => ({}));
+  const afterdate = body.afterdate ?? toYYYYMMDD(new Date());
+
+  console.log(`[sync-prfm] ===== 공연 데이터 수집 시작 (afterdate: ${afterdate}) =====`);
   try {
-    const prfmStats = await collectPrfm();
+    const prfmStats = await collectPrfm(afterdate);
     const detailStats = await collectPrfmDetails();
     console.log("[sync-prfm] ===== 완료 =====");
     return NextResponse.json({ ok: true, prfm: prfmStats, detail: detailStats });

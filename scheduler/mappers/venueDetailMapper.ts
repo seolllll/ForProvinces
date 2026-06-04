@@ -14,6 +14,6 @@ export function mapVenueDetail(db: KopisVenueDetailDb): VenueDetailRow {
     adres: db.adres ?? null,
     la: toFloat(db.la),
     lo: toFloat(db.lo),
-    crdt: new Date().toISOString(),
+    crdt: new Date().toISOString().slice(0, 10),
   };
 }

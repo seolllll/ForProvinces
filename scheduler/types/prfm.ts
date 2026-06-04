@@ -11,6 +11,11 @@ export interface KopisPrfmDb {
   prfstate: string;
 }
 
+export interface KopisRelate {
+  relatenm: string;
+  relateurl: string;
+}
+
 export interface KopisPrfmDetailDb {
   mt20id: string;
   mt10id: string;
@@ -29,6 +34,7 @@ export interface KopisPrfmDetailDb {
   daehakro?: string;
   openrun?: string;
   festival?: string;
+  relates?: { relate: KopisRelate | KopisRelate[] };
 }
 
 // ─── Supabase 테이블 행 타입 ─────────────────────────────────────────────────
@@ -63,5 +69,6 @@ export interface PrfmDetailRow {
   daehakro: string | null;
   openrun: string | null;
   festival: string | null;
+  relates: string | null;
   crdt: string;
 }

@@ -62,16 +62,18 @@ async function fetchXmlText(url: string): Promise<string> {
 
 // ── API 3: venue 목록 전체 페이지 수집 ──────────────────────────────────────
 
-async function collectVenues(): Promise<{ count: number; errors: number }> {
+async function collectVenues(afterdate?: string): Promise<{ count: number; errors: number }> {
   let cpage = 1;
   let count = 0;
   let errors = 0;
   const now = new Date().toISOString();
 
-  console.log("[sync-venues] venue 목록 수집 시작");
+  console.log(`[sync-venues] venue 목록 수집 시작${afterdate ? ` (afterdate: ${afterdate})` : ""}`);
 
   while (true) {
-    const url = `${VENUE_URL}?service=${API_KEY}&cpage=${cpage}&rows=${PAGE_SIZE}`;
+    const url =
+      `${VENUE_URL}?service=${API_KEY}&cpage=${cpage}&rows=${PAGE_SIZE}` +
+      (afterdate ? `&afterdate=${afterdate}` : "");
     const xml = await fetchXmlText(url);
     const parsed = xmlParser.parse(xml);
     const dbList: VenueListDb[] = parsed?.dbs?.db ?? [];
@@ -255,10 +257,17 @@ async function collectVenueDetails(): Promise<{
 
 // ── POST /api/sync-venues ─────────────────────────────────────────────────────
 
-export async function POST() {
-  console.log("[sync-venues] ===== 공연시설 수집 시작 =====");
+interface SyncVenuesRequest {
+  afterdate?: string;
+}
+
+export async function POST(req: Request) {
+  const body: SyncVenuesRequest = await req.json().catch(() => ({}));
+  const afterdate = body.afterdate || undefined;
+
+  console.log(`[sync-venues] ===== 공연시설 수집 시작${afterdate ? ` (afterdate: ${afterdate})` : ""} =====`);
   try {
-    const venueStats = await collectVenues();
+    const venueStats = await collectVenues(afterdate);
     const detailStats = await collectVenueDetails();
     console.log("[sync-venues] ===== 완료 =====");
     return NextResponse.json({ ok: true, venue: venueStats, detail: detailStats });

@@ -1,0 +1,192 @@
+================================================================================
+  ForProvinces — 코드 중간 점검 정리 내역
+  작업일: 2026-06-02
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+[1] 삭제된 파일 (7개)
+────────────────────────────────────────────────────────────────────────────────
+
+1. src/lib/prisma.ts
+   이유: 프로젝트 초기 Prisma ORM 기반 설계 잔존 파일.
+         현재 DB 클라이언트는 Supabase JS SDK로 완전 대체됨.
+         어디서도 import되지 않는 dead code.
+
+2. src/lib/kopis.ts
+   이유: KOPIS API 래퍼 함수 모음. 초기 설계 시 Next.js API 라우트에서
+         사용하려 했으나, WAF 차단 문제로 인해 실제 sync 라우트들은
+         node:http 직접 사용 방식으로 전환됨. 결국 어디서도 import되지 않음.
+         (참고용 타입/함수는 scheduler/ 폴더에 별도 유지됨)
+
+3. src/components/sidebar/PerformanceCard.tsx
+   이유: 구 Performance 테이블(Prisma 스키마) 기반 카드 컴포넌트.
+         현재 사이드바(PerformanceSidebar.tsx) 내부에
+         KOPIS prfm 기반 PerformanceItem 인라인 컴포넌트로 완전 대체됨.
+         어디서도 import되지 않는 dead code.
+
+4. src/app/api/performances/route.ts
+   이유: 구 Performance 테이블 기반 공연 목록 조회 API.
+         현재 프론트엔드는 /api/venues/[id]/performances 를 사용하므로
+         호출하는 곳이 없음.
+
+5. src/app/api/performances/[id]/route.ts
+   이유: 구 Performance 테이블 기반 공연 상세 조회 API.
+         현재 프론트엔드는 /api/prfm/[id] 를 사용하므로
+         호출하는 곳이 없음.
+
+6. src/app/api/health/route.ts
+   이유: Supabase venuedetail 테이블 연결 테스트용 개발 디버깅 엔드포인트.
+         초기 DB 연결 이슈 해결 후 역할이 끝난 임시 파일.
+         프론트엔드 어디서도 호출되지 않음.
+
+7. src/app/api/sync/route.ts
+   이유: 구 방식 KOPIS 동기화 엔드포인트 (kopis.ts 래퍼 + Performance 테이블 upsert).
+         현재 sync는 scheduler/ 폴더의 독립 Node.js 프로세스 + DEV 버튼 3개로 대체됨.
+         프론트엔드 어디서도 호출되지 않음.
+         (삭제된 kopis.ts를 import하고 있어 빌드 오류 원인이기도 함)
+
+
+────────────────────────────────────────────────────────────────────────────────
+[2] 타입 정리 — src/types/index.ts
+────────────────────────────────────────────────────────────────────────────────
+
+제거된 타입/상수 (9개):
+
+  - Category             (enum 타입)  — 구 Performance 테이블용. 삭제된 API/컴포넌트에서만 사용.
+  - CATEGORY_LABEL       (Record)     — PerformanceCard.tsx 전용. 해당 파일 삭제로 미사용.
+  - PerformanceStatus    (타입)       — PerformanceCard.tsx 전용. 해당 파일 삭제로 미사용.
+  - PerformanceSummary   (interface)  — 구 Performance 테이블용 목록 타입. 삭제된 파일에서만 사용.
+  - CastingPairMember    (interface)  — /api/performances/[id] 전용. 해당 파일 삭제로 미사용.
+  - CastingPairDetail    (interface)  — 정의만 있고 직접 import된 곳 없음.
+  - TicketingInfo        (interface)  — 정의만 있고 직접 import된 곳 없음.
+  - PerformanceDetail    (interface)  — 구 스키마 기반. 삭제된 파일에서만 사용.
+  - KopisGenre           (타입 alias) — KOPIS_GENRES 배열의 타입 별칭. 어디서도 import 없음.
+
+유지된 타입 (7개):
+
+  - KOPIS_GENRES         — GenreFilter.tsx에서 사용
+  - MapBounds            — mapStore.ts, KakaoMap.tsx에서 사용
+  - VenueMarker          — mapStore.ts, KakaoMap.tsx, venues/route.ts에서 사용
+  - TheatreInfo          — VenueInfo.theatres 필드 타입으로 사용
+  - VenueInfo            — venues/[id]/route.ts, PerformanceSidebar.tsx에서 사용
+  - VenuePerformance     — venues/[id]/performances/route.ts, PerformanceSidebar.tsx에서 사용
+  - ApiResponse<T>       — 전체 API 라우트에서 사용
+  - KopisRelate          — prfm/[id]/route.ts에서 사용
+  - KopisPrfmFull        — prfm/[id]/route.ts, PerformanceSidebar.tsx에서 사용
+
+
+────────────────────────────────────────────────────────────────────────────────
+[3] Zustand Store 정리 — src/store/mapStore.ts
+────────────────────────────────────────────────────────────────────────────────
+
+제거된 항목 (4개):
+
+  State:
+  - selectedPerformanceId: string | null
+    이유: 공연 상세 선택 state. 현재 상세 뷰는 PerformanceSidebar 내부
+          로컬 state(selectedPrfm)로 관리하므로 전역 store 불필요.
+
+  - performances: PerformanceSummary[]
+    이유: 구 Performance 테이블 기반 공연 목록 state.
+          setPerformances()와 함께 어디서도 호출되지 않음.
+
+  Action:
+  - selectPerformance(performanceId): void
+    이유: selectedPerformanceId를 세팅하는 액션. 해당 state 제거로 함께 삭제.
+
+  - setPerformances(performances): void
+    이유: performances state를 세팅하는 액션. 해당 state 제거로 함께 삭제.
+
+  Import:
+  - PerformanceSummary, Category import 제거
+    이유: 제거된 state의 타입으로만 사용됨.
+
+  - export type { Category } 제거
+    이유: Category 타입 자체가 types/index.ts에서 삭제됨.
+
+  closeSidebar 단순화:
+  - 기존: set({ isSidebarOpen: false, selectedVenueId: null, selectedPerformanceId: null })
+  - 변경: set({ isSidebarOpen: false, selectedVenueId: null })
+
+
+────────────────────────────────────────────────────────────────────────────────
+[4] 유틸 함수 정리 — src/lib/utils.ts
+────────────────────────────────────────────────────────────────────────────────
+
+제거된 함수 (3개):
+
+  - debounce<T>()
+    이유: CLAUDE.md에 지도 이동 시 debounce 처리가 명시되어 있으나,
+          현재 구현은 bounds_changed 이벤트를 사용하지 않음
+          (초기화 시 전체 1회 fetch 전략으로 설계됨). 미사용.
+
+  - formatDate(dateStr)
+    이유: PerformanceCard.tsx 전용. 해당 파일 삭제로 미사용.
+          KOPIS 날짜 데이터는 이미 "YYYY.MM.DD" 형식 문자열로 저장되므로
+          변환 불필요.
+
+  - formatDateTime(dateStr)
+    이유: 구 PerformanceDetail.tsx(Ticketing.openAt ISO 포맷용)에서 사용하던 함수.
+          신규 PerformanceDetail.tsx는 relates(예매처 링크)만 렌더링하므로 미사용.
+
+유지된 함수 (1개):
+
+  - cn(...inputs)
+    이유: clsx + tailwind-merge 결합. 전체 UI 컴포넌트에서 광범위하게 사용.
+
+
+────────────────────────────────────────────────────────────────────────────────
+[5] 기타 (이전 세션에서 이미 삭제됨)
+────────────────────────────────────────────────────────────────────────────────
+
+  - src/components/filter/CategoryFilter.tsx
+    이유: 구 activeCategories/toggleCategory store 참조. GenreFilter.tsx로 대체됨.
+          (이전 세션에서 삭제됨 — TypeScript 컴파일 오류 수정 과정)
+
+
+────────────────────────────────────────────────────────────────────────────────
+[6] 검증
+────────────────────────────────────────────────────────────────────────────────
+
+  npx tsc --noEmit → 오류 없음 (exit 0)
+
+
+────────────────────────────────────────────────────────────────────────────────
+[7] 정리 후 현재 활성 파일 구조
+────────────────────────────────────────────────────────────────────────────────
+
+src/
+├── app/
+│   ├── page.tsx
+│   ├── layout.tsx
+│   └── api/
+│       ├── venues/route.ts                   ← GET: 필터 기반 공연장 전체
+│       ├── venues/[id]/route.ts              ← GET: 공연장 상세
+│       ├── venues/[id]/performances/route.ts ← GET: 시설별 공연 목록
+│       ├── prfm/[id]/route.ts                ← GET: 공연 상세 (prfm+prfmdetail 조인)
+│       ├── sync-venues/route.ts              ← POST: [DEV] 공연시설 수집
+│       ├── sync-prfm/route.ts                ← POST: [DEV] 공연 목록+상세 수집
+│       └── sync-prfm-detail/route.ts         ← POST: [DEV] relates 업데이트
+├── components/
+│   ├── map/KakaoMap.tsx
+│   ├── filter/GenreFilter.tsx
+│   ├── sidebar/
+│   │   ├── PerformanceSidebar.tsx
+│   │   └── PerformanceDetail.tsx
+│   └── debug/
+│       ├── SyncVenuesButton.tsx
+│       ├── SyncPrfmButton.tsx
+│       └── SyncPrfmDetailButton.tsx
+├── lib/
+│   ├── supabase.ts
+│   └── utils.ts
+├── store/
+│   └── mapStore.ts
+└── types/
+    └── index.ts
+
+
+================================================================================
+  END OF REPORT
+================================================================================

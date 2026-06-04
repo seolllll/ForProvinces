@@ -1,4 +1,11 @@
-import type { KopisPrfmDetailDb, PrfmDetailRow } from '../types/prfm.js';
+import type { KopisPrfmDetailDb, KopisRelate, PrfmDetailRow } from '../types/prfm.js';
+
+function parseRelates(raw: KopisPrfmDetailDb['relates']): string | null {
+  if (!raw?.relate) return null;
+  const list: KopisRelate[] = Array.isArray(raw.relate) ? raw.relate : [raw.relate];
+  const mapped = list.map((r) => ({ relatenm: r.relatenm, relateurl: r.relateurl }));
+  return JSON.stringify(mapped);
+}
 
 export function mapPrfmDetail(db: KopisPrfmDetailDb): PrfmDetailRow {
   return {
@@ -19,6 +26,7 @@ export function mapPrfmDetail(db: KopisPrfmDetailDb): PrfmDetailRow {
     daehakro: db.daehakro ?? null,
     openrun: db.openrun ?? null,
     festival: db.festival ?? null,
-    crdt: new Date().toISOString(),
+    relates: parseRelates(db.relates),
+    crdt: new Date().toISOString().slice(0, 10),
   };
 }

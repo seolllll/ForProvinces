@@ -4,7 +4,8 @@ import { useRef, useCallback } from "react";
 import Script from "next/script";
 import { useMapStore } from "@/store/mapStore";
 import type { VenueMarker, MapBounds } from "@/types";
-import markerImg from "@/images/marker.png";
+import defaultMarkerImg from "@/images/defaultMarker.png";
+import selectedMarkerImg from "@/images/marker.png";
 
 // ─────────────────────────────────────────
 // Kakao Maps SDK 최소 타입 선언
@@ -30,6 +31,8 @@ declare global {
 
 interface KakaoMapInstance {
   getBounds: () => KakaoBounds;
+  setCenter: (latlng: KakaoLatLng) => void;
+  setLevel: (level: number) => void;
 }
 interface KakaoLatLng {
   getLat: () => number;
@@ -45,6 +48,7 @@ interface KakaoClusterer {
 }
 interface KakaoMarker {
   setMap?: (map: KakaoMapInstance | null) => void;
+  setImage: (image: KakaoMarkerImage) => void;
 }
 interface KakaoMarkerImage {}
 interface KakaoSize {}
@@ -59,8 +63,6 @@ export default function KakaoMap() {
 
   const { setBounds, setVenueMarkers, selectVenue } = useMapStore();
 
-  // ── SDK 로드 완료 시 지도 초기화 ──────
-  // autoload=false: kakao 객체만 준비, maps.load() 콜백 안에서만 생성자 사용 가능
   const initMap = useCallback(() => {
     if (mapRef.current || !containerRef.current) return;
 
@@ -70,10 +72,10 @@ export default function KakaoMap() {
     }
 
     window.kakao.maps.load(() => {
-      const { Map, LatLng, MarkerClusterer, Marker, MarkerImage, Size, event } = window.kakao.maps;
+      const { Map: KakaoMapCtor, LatLng, MarkerClusterer, Marker, MarkerImage, Size, event } = window.kakao.maps;
 
-      const map = new Map(containerRef.current!, {
-        center: new LatLng(36.5, 127.8), // 전국 중심
+      const map = new KakaoMapCtor(containerRef.current!, {
+        center: new LatLng(36.5, 127.8),
         level: 13,
       });
 
@@ -100,29 +102,71 @@ export default function KakaoMap() {
       mapRef.current = map;
       clustererRef.current = clusterer;
 
-      // ── 마커 전체를 1회 fetch → 클러스터러에 등록 ──────────────────
-      // bounds_changed마다 재요청하면 뷰마다 마커 세트가 바뀌어 클러스터 값이 불일치함.
-      // 공연중 공연장은 수백 건 수준이므로 전체를 한 번에 받아 클러스터러가 직접 처리.
-      fetch("/api/venues")
-        .then((r) => r.json())
-        .then((json) => {
-          const markers: VenueMarker[] = json.data ?? [];
-          setVenueMarkers(markers);
+      const defaultMarkerImage = new MarkerImage(defaultMarkerImg.src, new Size(65, 35));
+      const selectedMarkerImage = new MarkerImage(selectedMarkerImg.src, new Size(65, 35));
 
-          const markerImage = new MarkerImage(markerImg.src, new Size(65, 35));
-          const kakaoMarkers = markers.map((v) => {
-            const marker = new Marker({
-              position: new LatLng(v.latitude, v.longitude),
-              image: markerImage,
+      // venueid → 마커 인스턴스 (선택 상태 이미지 교체용)
+      const markerMap = new Map<string, KakaoMarker>();
+
+      // 장르 목록으로 마커를 fetch해 클러스터러에 등록
+      function loadMarkers(genres: string[], states: string[]) {
+        const genresQ = genres.map((g) => encodeURIComponent(g)).join(",");
+        const statesQ = states.map((s) => encodeURIComponent(s)).join(",");
+        fetch(`/api/venues?genres=${genresQ}&states=${statesQ}`)
+          .then((r) => r.json())
+          .then((json) => {
+            const venues: VenueMarker[] = json.data ?? [];
+            setVenueMarkers(venues);
+
+            markerMap.clear();
+            clusterer.clear();
+            const currentSelectedId = useMapStore.getState().selectedVenueId;
+            const kakaoMarkers = venues.map((v) => {
+              const marker = new Marker({
+                position: new LatLng(v.latitude, v.longitude),
+                image: v.id === currentSelectedId ? selectedMarkerImage : defaultMarkerImage,
+              });
+              event.addListener(marker, "click", () => selectVenue(v.id));
+              markerMap.set(v.id, marker);
+              return marker;
             });
-            event.addListener(marker, "click", () => selectVenue(v.id));
-            return marker;
-          });
-          clusterer.addMarkers(kakaoMarkers);
-        })
-        .catch((e) => console.error("[KakaoMap] 마커 fetch 실패:", e));
+            clusterer.addMarkers(kakaoMarkers);
+          })
+          .catch((e) => console.error("[KakaoMap] 마커 fetch 실패:", e));
+      }
 
-      // ── bounds_changed: 사이드바용 bounds 추적만 담당 ──
+      // 초기 로드
+      const init = useMapStore.getState();
+      loadMarkers(init.activeGenres, init.activeStates);
+
+      // 장르/상태/선택 공연장/줌 변경 구독
+      let prevGenres = init.activeGenres;
+      let prevStates = init.activeStates;
+      let prevZoomTarget = init.zoomTarget;
+      let prevSelectedVenueId = init.selectedVenueId;
+      useMapStore.subscribe((state) => {
+        if (state.activeGenres !== prevGenres || state.activeStates !== prevStates) {
+          prevGenres = state.activeGenres;
+          prevStates = state.activeStates;
+          loadMarkers(state.activeGenres, state.activeStates);
+        }
+        if (state.selectedVenueId !== prevSelectedVenueId) {
+          if (prevSelectedVenueId) {
+            markerMap.get(prevSelectedVenueId)?.setImage(defaultMarkerImage);
+          }
+          if (state.selectedVenueId) {
+            markerMap.get(state.selectedVenueId)?.setImage(selectedMarkerImage);
+          }
+          prevSelectedVenueId = state.selectedVenueId;
+        }
+        if (state.zoomTarget !== prevZoomTarget && state.zoomTarget) {
+          prevZoomTarget = state.zoomTarget;
+          map.setCenter(new LatLng(state.zoomTarget.lat, state.zoomTarget.lng));
+          map.setLevel(state.zoomTarget.level);
+        }
+      });
+
+      // bounds_changed: 사이드바용 bounds 추적
       const handleBoundsChange = () => {
         const b = map.getBounds();
         const sw = b.getSouthWest();
@@ -143,17 +187,11 @@ export default function KakaoMap() {
 
   return (
     <>
-      {/*
-        onReady: 스크립트 첫 로드 + 이후 컴포넌트 재마운트 시에도 실행됨
-        onLoad: 캐시에 스크립트가 이미 있으면 발화 안 하는 케이스 있음
-        autoload=false: kakao 객체만 준비, load() 호출 전까지 지도 초기화 안 함
-      */}
       <Script
         src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY}&libraries=clusterer&autoload=false`}
         strategy="afterInteractive"
         onReady={initMap}
       />
-      {/* absolute inset-0: main의 h-screen/w-screen을 정확히 꽉 채움 */}
       <div ref={containerRef} className="absolute inset-0" />
     </>
   );

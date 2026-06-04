@@ -7,6 +7,6 @@ export function mapVenue(db: KopisVenueDb): VenueRow {
     venuecnt: db.mt13cnt,
     sidonm: db.sidonm,
     gugunnm: db.gugunnm,
-    crdt: new Date().toISOString(),
+    crdt: new Date().toISOString().slice(0, 10),
   };
 }

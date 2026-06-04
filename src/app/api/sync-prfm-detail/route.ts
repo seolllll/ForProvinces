@@ -11,7 +11,7 @@ const PAGE_SIZE = 100;
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   parseTagValue: true,
-  isArray: (tagName) => ["db"].includes(tagName),
+  isArray: (tagName) => ["db", "relate"].includes(tagName),
 });
 
 const KOPIS_HEADERS = {
@@ -93,78 +93,51 @@ async function fetchAllIds(table: string, column: string): Promise<string[]> {
   return ids;
 }
 
-async function getTargetPrfmIds(): Promise<string[]> {
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+async function getCollectedPrfmIds(): Promise<string[]> {
+  const ids = await fetchAllIds("prfmdetail", "prfmid");
+  console.log(`[sync-prfm-detail] prfmdetail 수집 완료 대상: ${ids.length}건`);
+  return ids;
+}
 
-  const [allIds, detailedIds, { data: todayPrfm }] = await Promise.all([
-    fetchAllIds("prfm", "prfmid"),
-    fetchAllIds("prfmdetail", "prfmid"),
-    supabase
-      .from("prfm")
-      .select("prfmid")
-      .gte("crdt", `${today}T00:00:00.000Z`)
-      .lt("crdt", `${tomorrow}T00:00:00.000Z`),
-  ]);
-
-  const detailedSet = new Set(detailedIds);
-  const missingIds = allIds.filter((id) => !detailedSet.has(id));
-
-  console.log(
-    `[sync-prfm-detail] prfm 전체: ${allIds.length}건, 수집완료: ${detailedIds.length}건, 미수집: ${missingIds.length}건`
-  );
-
-  return [
-    ...new Set([
-      ...(todayPrfm ?? []).map((v: { prfmid: string }) => v.prfmid),
-      ...missingIds,
-    ]),
-  ];
+interface KopisRelate {
+  relatenm: string;
+  relateurl: string;
 }
 
 interface PrfmDetailDb {
   mt20id: string;
-  mt10id: string;
-  mt13id: string;
-  prfcast?: string;
-  prfruntime?: string;
-  prfage?: string;
-  entrpsnm?: string;
-  entrpsnmP?: string;
-  entrpsnmA?: string;
-  entrpsnmH?: string;
-  entrpsnmS?: string;
-  pcseguidance?: string;
-  visit?: string;
-  child?: string;
-  daehakro?: string;
-  openrun?: string;
-  festival?: string;
+  relates?: { relate?: KopisRelate[] };
+}
+
+function parseRelates(raw: PrfmDetailDb["relates"]): string | null {
+  const list = raw?.relate;
+  if (!list || list.length === 0) return null;
+  const mapped = list.map((r) => ({ relatenm: r.relatenm, relateurl: r.relateurl }));
+  return JSON.stringify(mapped);
 }
 
 interface SyncPrfmDetailRequest {
   startPage?: number;
 }
 
-async function collectPrfmDetails(startPage: number): Promise<{
+async function collectRelates(startPage: number): Promise<{
   success: number;
   fail: number;
   total: number;
   startPage: number;
   failedPage?: number;
 }> {
-  const prfmIds = await getTargetPrfmIds();
+  const prfmIds = await getCollectedPrfmIds();
   const startIndex = (startPage - 1) * PAGE_SIZE;
   const targetIds = prfmIds.slice(startIndex);
 
   console.log(
-    `[sync-prfm-detail] 수집 대상: 전체 ${prfmIds.length}건 중 page ${startPage}(index ${startIndex})부터 ${targetIds.length}건 처리`
+    `[sync-prfm-detail] relates 수집: 전체 ${prfmIds.length}건 중 page ${startPage}(index ${startIndex})부터 ${targetIds.length}건 처리`
   );
 
   let success = 0;
   let fail = 0;
   let firstFailPage: number | undefined;
-  const now = new Date().toISOString();
 
   for (let i = 0; i < targetIds.length; i++) {
     const prfmid = targetIds[i];
@@ -178,33 +151,14 @@ async function collectPrfmDetails(startPage: number): Promise<{
       const db: PrfmDetailDb | undefined = parsed?.dbs?.db?.[0];
       if (!db) throw new Error("응답 데이터 없음");
 
-      const { error } = await supabase.from("prfmdetail").upsert(
-        [
-          {
-            prfmid: String(db.mt20id),
-            venueid: String(db.mt10id),
-            theatreid: String(db.mt13id),
-            prfmcast: db.prfcast ?? null,
-            runtime: db.prfruntime ?? null,
-            viewage: db.prfage ?? null,
-            entrpsnm: db.entrpsnm ?? null,
-            entrpsnmp: db.entrpsnmP ?? null,
-            entrpsnma: db.entrpsnmA ?? null,
-            entrpsnmh: db.entrpsnmH ?? null,
-            entrpsnms: db.entrpsnmS ?? null,
-            pcseguidance: db.pcseguidance ?? null,
-            visit: db.visit ?? null,
-            child: db.child ?? null,
-            daehakro: db.daehakro ?? null,
-            openrun: db.openrun ?? null,
-            festival: db.festival ?? null,
-            crdt: now,
-          },
-        ],
-        { onConflict: "prfmid" }
-      );
+      const relates = parseRelates(db.relates);
 
-      if (error) throw new Error(`prfmdetail upsert: ${error.message}`);
+      const { error } = await supabase
+        .from("prfmdetail")
+        .update({ relates })
+        .eq("prfmid", prfmid);
+
+      if (error) throw new Error(`relates update: ${error.message}`);
 
       success++;
     } catch (err) {
@@ -224,7 +178,7 @@ async function collectPrfmDetails(startPage: number): Promise<{
     await delay(500);
   }
 
-  console.log(`[sync-prfm-detail] 완료: ${success}/${targetIds.length}건 성공`);
+  console.log(`[sync-prfm-detail] 완료: ${success}/${targetIds.length}건 relates 업데이트`);
   return {
     success,
     fail,
@@ -240,9 +194,9 @@ export async function POST(req: Request) {
   const body: SyncPrfmDetailRequest = await req.json().catch(() => ({}));
   const startPage = Math.max(1, body.startPage ?? 1);
 
-  console.log(`[sync-prfm-detail] ===== 공연 상세 수집 시작 (startPage: ${startPage}) =====`);
+  console.log(`[sync-prfm-detail] ===== relates 수집 시작 (startPage: ${startPage}) =====`);
   try {
-    const detailStats = await collectPrfmDetails(startPage);
+    const detailStats = await collectRelates(startPage);
     console.log("[sync-prfm-detail] ===== 완료 =====");
     return NextResponse.json({ ok: true, detail: detailStats });
   } catch (err) {

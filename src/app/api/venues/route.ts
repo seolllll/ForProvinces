@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import type { VenueMarker, ApiResponse } from "@/types";
 
@@ -60,15 +60,23 @@ async function fetchVenueCoords(
   return results.flat();
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
+  const genres = (searchParams.get("genres") ?? "").split(",").map(decodeURIComponent).filter(Boolean);
+  const states = (searchParams.get("states") ?? "").split(",").map(decodeURIComponent).filter(Boolean);
+
   try {
-    // ── 1 + 2 병렬: 전역 공연중 venue명 & venue 전체 목록 동시 조회 ──
+    // ── 1 + 2 병렬: 선택된 상태/장르 기준 venue명 & venue 전체 목록 동시 조회 ──
+    let prfmQuery = supabase
+      .from("prfm")
+      .select("venuenm")
+      .limit(SUPABASE_LIMIT);
+
+    if (states.length > 0) prfmQuery = prfmQuery.in("state", states);
+    if (genres.length > 0) prfmQuery = prfmQuery.in("genrenm", genres);
+
     const [activePrfmResult, allVenues] = await Promise.all([
-      supabase
-        .from("prfm")
-        .select("venuenm")
-        .eq("state", "공연중")
-        .limit(SUPABASE_LIMIT),
+      prfmQuery,
       fetchAllVenues(),
     ]);
 

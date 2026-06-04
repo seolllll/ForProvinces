@@ -1,157 +1,183 @@
 "use client";
 
-import Image from "next/image";
-import { ArrowLeft, Calendar, Clock, MapPin, Ticket, Users } from "lucide-react";
-import { formatDate, formatDateTime } from "@/lib/utils";
-import { CATEGORY_LABEL } from "@/types";
-import type { PerformanceDetail } from "@/types";
+import { useState } from "react";
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  ImageOff,
+  Ticket,
+  Users,
+  Building2,
+  Star,
+  ExternalLink,
+} from "lucide-react";
+import type { KopisPrfmFull } from "@/types";
 
 interface Props {
-  performance: PerformanceDetail;
+  prfm: KopisPrfmFull;
   onBack: () => void;
 }
 
-export default function PerformanceDetailView({ performance: p, onBack }: Props) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex gap-3 py-2.5 border-b border-border last:border-0">
+      <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-xs text-foreground break-words">{value}</span>
+    </div>
+  );
+}
+
+function Badge({ text, variant = "default" }: { text: string; variant?: "default" | "state" | "tag" }) {
+  const styles = {
+    default: "bg-primary/10 text-primary",
+    state: "bg-green-100 text-green-700",
+    tag: "bg-secondary text-secondary-foreground",
+  };
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[variant]}`}>
+      {text}
+    </span>
+  );
+}
+
+export default function PerformanceDetail({ prfm, onBack }: Props) {
+  const [imgError, setImgError] = useState(false);
+
+
+  // 특이사항 태그
+  const tags: string[] = [
+    prfm.visit === "Y" && "내한공연",
+    prfm.child === "Y" && "어린이공연",
+    prfm.daehakro === "Y" && "대학로",
+    prfm.openrun === "Y" && "오픈런",
+    prfm.festival === "Y" && "축제",
+  ].filter((v): v is string => !!v);
+
+  return (
+    <div className="flex flex-col gap-0">
       {/* 뒤로가기 */}
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="flex items-center gap-1.5 px-1 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="h-3.5 w-3.5" />
         목록으로
       </button>
 
-      {/* 포스터 + 기본 정보 */}
-      <div className="flex gap-4">
-        <div className="relative h-44 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
-          {p.posterUrl ? (
-            <Image src={p.posterUrl} alt={p.title} fill className="object-cover" sizes="128px" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              No Image
-            </div>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-2">
-          <span className="w-fit rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
-            {CATEGORY_LABEL[p.category]}
-          </span>
-          <h2 className="font-bold text-foreground leading-tight">{p.title}</h2>
-
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4 shrink-0" />
-            <span>{p.venue.address}</span>
+      {/* 포스터 */}
+      <div className="relative w-full aspect-[3/4] max-h-72 overflow-hidden rounded-xl bg-muted mb-4">
+        {prfm.posterurl && !imgError ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={prfm.posterurl}
+            alt={prfm.prfmnm}
+            className="h-full w-full object-contain"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <ImageOff className="h-10 w-10 text-muted-foreground/40" />
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4 shrink-0" />
-            <span>{formatDate(p.startDate)} ~ {formatDate(p.endDate)}</span>
-          </div>
-
-          {p.runtime && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4 shrink-0" />
-              <span>러닝타임 {p.runtime}분</span>
-            </div>
+      {/* 제목 + 배지 */}
+      <div className="flex flex-col gap-2 mb-4">
+        <h2 className="text-base font-bold leading-snug text-foreground">{prfm.prfmnm}</h2>
+        <div className="flex flex-wrap gap-1.5">
+          {prfm.genrenm && <Badge text={prfm.genrenm} variant="default" />}
+          {prfm.state && (
+            <Badge
+              text={prfm.state}
+              variant={prfm.state === "공연중" ? "state" : "tag"}
+            />
           )}
-
-          {p.price && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Ticket className="h-4 w-4 shrink-0" />
-              <span>{p.price}</span>
-            </div>
-          )}
-
-          {p.ageLimit && (
-            <span className="w-fit rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-              {p.ageLimit}
-            </span>
-          )}
+          {tags.map((tag) => (
+            <Badge key={tag} text={tag} variant="tag" />
+          ))}
         </div>
       </div>
 
-      {/* 예매 일정 */}
-      {p.ticketings.length > 0 && (
-        <section>
-          <h3 className="mb-2 flex items-center gap-1.5 font-semibold text-foreground">
-            <Ticket className="h-4 w-4 text-primary" />
-            예매 일정
-          </h3>
-          <ul className="flex flex-col gap-2">
-            {p.ticketings.map((t) => (
-              <li key={t.id} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">{t.platform}</span>
-                  {t.ticketType && (
-                    <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                      {t.ticketType}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatDateTime(t.openAt)} 오픈
-                </p>
-                {t.note && <p className="mt-1 text-xs text-muted-foreground">{t.note}</p>}
-                {t.url && (
-                  <a
-                    href={t.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-block text-xs text-primary underline underline-offset-2"
-                  >
-                    예매하러 가기 →
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* 기본 정보 */}
+      <section className="mb-4 rounded-xl border border-border bg-card px-4 py-1">
+        {prfm.prfmfrom && prfm.prfmto && (
+          <InfoRow
+            label="공연기간"
+            value={`${prfm.prfmfrom} ~ ${prfm.prfmto}`}
+          />
+        )}
+        {prfm.runtime && (
+          <InfoRow label="공연시간" value={prfm.runtime} />
+        )}
+        {prfm.viewage && (
+          <InfoRow label="관람연령" value={prfm.viewage} />
+        )}
+        {prfm.venuenm && (
+          <InfoRow label="공연장" value={prfm.venuenm} />
+        )}
+      </section>
 
-      {/* 캐스팅 페어 */}
-      {p.castingPairs.length > 0 && (
-        <section>
-          <h3 className="mb-2 flex items-center gap-1.5 font-semibold text-foreground">
+      {/* 캐스팅 */}
+      {prfm.prfmcast && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <Users className="h-4 w-4 text-primary" />
-            캐스팅 페어
+            출연진
           </h3>
-          <ul className="flex flex-col gap-2">
-            {p.castingPairs.map((pair) => (
-              <li key={pair.id} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex flex-wrap gap-2">
-                  {pair.members.map((m) => (
-                    <div key={m.actorId} className="text-sm">
-                      <span className="text-muted-foreground">{m.roleName}</span>
-                      {" "}
-                      <span className="font-medium">{m.actorName}</span>
-                    </div>
-                  ))}
-                </div>
-                {pair.scheduleDates.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    출연일: {pair.scheduleDates.slice(0, 3).join(", ")}
-                    {pair.scheduleDates.length > 3 && ` 외 ${pair.scheduleDates.length - 3}회`}
-                  </p>
-                )}
-                {pair.note && (
-                  <p className="mt-1 text-xs text-muted-foreground">{pair.note}</p>
-                )}
-              </li>
-            ))}
-          </ul>
+          <p className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-relaxed text-foreground whitespace-pre-wrap">
+            {prfm.prfmcast}
+          </p>
         </section>
       )}
 
-      {/* 공연 소개 */}
-      {p.description && (
-        <section>
-          <h3 className="mb-2 font-semibold text-foreground">공연 소개</h3>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-            {p.description}
+      {/* 티켓 가격 */}
+      {prfm.pcseguidance && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Ticket className="h-4 w-4 text-primary" />
+            티켓 가격
+          </h3>
+          <p className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-relaxed text-foreground whitespace-pre-wrap">
+            {prfm.pcseguidance}
           </p>
+        </section>
+      )}
+
+      {/* 제작사 */}
+      {prfm.entrpsnm && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Building2 className="h-4 w-4 text-primary" />
+            제작사
+          </h3>
+          <p className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+            {prfm.entrpsnm}
+          </p>
+        </section>
+      )}
+
+      {/* 예매처 링크 */}
+      {prfm.relates && prfm.relates.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Star className="h-4 w-4 text-primary" />
+            예매처
+          </h3>
+          <div className="flex flex-col gap-2">
+            {prfm.relates.map((r, i) => (
+              <a
+                key={i}
+                href={r.relateurl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <span>{r.relatenm}</span>
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+              </a>
+            ))}
+          </div>
         </section>
       )}
     </div>

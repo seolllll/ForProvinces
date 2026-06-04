@@ -9,15 +9,28 @@ type SyncResult = {
   error?: string;
 };
 
+function toYYYYMMDD(isoDate: string): string {
+  return isoDate.replace(/-/g, "");
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function SyncPrfmButton() {
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [result, setResult] = useState<SyncResult | null>(null);
+  const [afterdate, setAfterdate] = useState(todayIso());
 
   async function handleSync() {
     setStatus("loading");
     setResult(null);
     try {
-      const res = await fetch("/api/sync-prfm", { method: "POST" });
+      const res = await fetch("/api/sync-prfm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ afterdate: toYYYYMMDD(afterdate) }),
+      });
       const data: SyncResult = await res.json();
       setResult(data);
       setStatus(data.ok ? "done" : "error");
@@ -29,23 +42,35 @@ export default function SyncPrfmButton() {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleSync}
-        disabled={status === "loading"}
-        className="flex items-center gap-2 rounded-lg border border-blue-400 bg-blue-400/10 px-3 py-1.5 text-xs font-medium text-blue-300 backdrop-blur-sm transition hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {status === "loading" ? (
-          <>
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border border-blue-300 border-t-transparent" />
-            수집 중…
-          </>
-        ) : (
-          <>
-            <span>🎭</span>
-            [DEV] 공연 수집
-          </>
-        )}
-      </button>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1 text-xs text-blue-300">
+          <span>after</span>
+          <input
+            type="date"
+            value={afterdate}
+            onChange={(e) => setAfterdate(e.target.value)}
+            disabled={status === "loading"}
+            className="rounded border border-blue-400/40 bg-blue-900/30 px-1.5 py-0.5 text-xs text-blue-200 outline-none focus:border-blue-400 disabled:opacity-50"
+          />
+        </label>
+        <button
+          onClick={handleSync}
+          disabled={status === "loading"}
+          className="flex items-center gap-2 rounded-lg border border-blue-400 bg-blue-400/10 px-3 py-1.5 text-xs font-medium text-blue-300 backdrop-blur-sm transition hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {status === "loading" ? (
+            <>
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border border-blue-300 border-t-transparent" />
+              수집 중…
+            </>
+          ) : (
+            <>
+              <span>🎭</span>
+              [DEV] 공연 수집
+            </>
+          )}
+        </button>
+      </div>
 
       {result && (
         <div
