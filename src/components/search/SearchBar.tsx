@@ -18,11 +18,13 @@ export default function SearchBar({ className }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { selectVenue, setZoomTarget, setPendingPrfmId, activeGenres } = useMapStore();
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const { selectVenue, setZoomTarget, setPendingPrfmId, activeGenres, enableGenre, activeStates } = useMapStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const search = useCallback(async (q: string, genres: string[]) => {
+  const search = useCallback(async (q: string, states: string[]) => {
     if (q.trim().length < 2) {
       setResults([]);
       setIsOpen(false);
@@ -30,9 +32,9 @@ export default function SearchBar({ className }: { className?: string }) {
     }
     setIsLoading(true);
     try {
-      const genresQ = genres.map((g) => encodeURIComponent(g)).join(",");
+      const statesQ = states.map((s) => encodeURIComponent(s)).join(",");
       const res = await fetch(
-        `/api/prfm/search?q=${encodeURIComponent(q.trim())}&genres=${genresQ}`
+        `/api/prfm/search?q=${encodeURIComponent(q.trim())}&states=${statesQ}`
       );
       const json = await res.json();
       setResults(json.data ?? []);
@@ -46,11 +48,18 @@ export default function SearchBar({ className }: { className?: string }) {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(query, activeGenres), 300);
+    const searchStates = ["공연중", "공연예정", ...(activeStates.includes("공연완료") ? ["공연완료"] : [])];
+    debounceRef.current = setTimeout(() => search(query, searchStates), 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, activeGenres, search]);
+  }, [query, activeStates, search]);
+
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(null), 3000);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -64,7 +73,11 @@ export default function SearchBar({ className }: { className?: string }) {
   }, []);
 
   function handleSelect(result: SearchResult) {
-    setZoomTarget({ lat: result.la, lng: result.lo, level: 5 });
+    if (result.genrenm && !activeGenres.includes(result.genrenm)) {
+      enableGenre(result.genrenm);
+      setToastMsg(`'${result.genrenm}' 필터가 선택되었습니다`);
+    }
+    setZoomTarget({ lat: result.la, lng: result.lo, level: 4 });
     setPendingPrfmId(result.prfmid);
     selectVenue(result.venueid);
     setQuery(result.prfmnm);
@@ -78,7 +91,13 @@ export default function SearchBar({ className }: { className?: string }) {
   }
 
   return (
-    <div ref={containerRef} className={cn("relative w-80", className)}>
+    <>
+    {toastMsg && (
+      <div className="fixed left-1/2 top-20 z-[100] -translate-x-1/2 rounded-lg bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-200">
+        {toastMsg}
+      </div>
+    )}
+    <div ref={containerRef} className={cn("relative w-full sm:w-80", className)}>
       {/* 입력창 */}
       <div className="flex items-center gap-2 rounded-xl bg-white/95 px-3 py-2 shadow-lg ring-1 ring-black/10 backdrop-blur-sm">
         <Search className="h-4 w-4 shrink-0 text-gray-400" />
@@ -148,5 +167,6 @@ export default function SearchBar({ className }: { className?: string }) {
         </ul>
       )}
     </div>
+    </>
   );
 }

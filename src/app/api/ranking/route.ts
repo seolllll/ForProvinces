@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ data: [] });
   }
 
-  const { data, error } = await supabase
+  const { data: rankings, error } = await supabase
     .from("prfm_ranking")
     .select("rank, prfmnm, venuenm, period, prfdtcnt, posterurl, prfmid")
     .eq("area", area)
@@ -31,5 +31,43 @@ export async function GET(req: Request) {
     .order("rank");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data ?? [], crdt: latestRow.crdt });
+  if (!rankings?.length) return NextResponse.json({ data: [], crdt: latestRow.crdt });
+
+  const prfmIds = rankings.map((r) => r.prfmid as string);
+
+  // prfmid → venueid, state 병렬 조회
+  const [{ data: details }, { data: prfmStates }] = await Promise.all([
+    supabase.from("prfmdetail").select("prfmid, venueid").in("prfmid", prfmIds),
+    supabase.from("prfm").select("prfmid, state").in("prfmid", prfmIds),
+  ]);
+
+  const stateMap = new Map<string, string>(
+    (prfmStates ?? []).map((p) => [p.prfmid as string, p.state as string])
+  );
+
+  const prfmToVenue = new Map<string, string>();
+  for (const d of details ?? []) {
+    if (!prfmToVenue.has(d.prfmid)) prfmToVenue.set(d.prfmid, d.venueid);
+  }
+
+  // venueid → 좌표
+  const venueIds = [...new Set(prfmToVenue.values())];
+  const { data: coords } = await supabase
+    .from("venuedetail")
+    .select("venueid, la, lo")
+    .in("venueid", venueIds)
+    .not("la", "is", null)
+    .not("lo", "is", null);
+
+  const coordMap = new Map(
+    (coords ?? []).map((c) => [c.venueid as string, { la: c.la as number, lo: c.lo as number }])
+  );
+
+  const data = rankings.map((r) => {
+    const venueid = prfmToVenue.get(r.prfmid) ?? null;
+    const coord = venueid ? coordMap.get(venueid) ?? null : null;
+    return { ...r, venueid, la: coord?.la ?? null, lo: coord?.lo ?? null, state: stateMap.get(r.prfmid) ?? null };
+  });
+
+  return NextResponse.json({ data, crdt: latestRow.crdt });
 }

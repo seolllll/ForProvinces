@@ -3,10 +3,7 @@ import GenreFilter from "@/components/filter/GenreFilter";
 import PerformanceSidebar from "@/components/sidebar/PerformanceSidebar";
 import RegionPerformancePanel from "@/components/sidebar/RegionPerformancePanel";
 import SearchBar from "@/components/search/SearchBar";
-import SyncVenuesButton from "@/components/debug/SyncVenuesButton";
-import SyncPrfmButton from "@/components/debug/SyncPrfmButton";
-import SyncPrfmDetailButton from "@/components/debug/SyncPrfmDetailButton";
-import SyncRankingButton from "@/components/debug/SyncRankingButton";
+import DevPanel from "@/components/debug/DevPanel";
 
 export default function HomePage() {
   return (
@@ -14,8 +11,8 @@ export default function HomePage() {
       {/* 카카오 지도 (전체 화면) */}
       <KakaoMap />
 
-      {/* 검색바 — 상단 중앙 */}
-      <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2">
+      {/* 검색바 — 모바일: 필터·DEV 버튼 사이 전체 너비 / sm+: 상단 중앙 */}
+      <div className="absolute left-14 right-24 top-4 z-10 sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
         <SearchBar />
       </div>
 
@@ -25,11 +22,8 @@ export default function HomePage() {
       </div>
 
       {/* [DEV] 버튼 그룹 — 우상단 */}
-      <div className="absolute right-72 top-4 z-10 flex flex-col items-end gap-2">
-        <SyncVenuesButton />
-        <SyncPrfmButton />
-        <SyncPrfmDetailButton />
-        <SyncRankingButton />
+      <div className="absolute right-4 top-4 z-10">
+        <DevPanel />
       </div>
 
       {/* 지역별 공연 순위 패널 */}

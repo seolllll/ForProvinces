@@ -4,60 +4,19 @@ import type { VenueMarker, ApiResponse } from "@/types";
 
 /**
  * GET /api/venues
- * "공연중" 공연이 있는 모든 공연장 반환 (bounds 필터 없음)
+ * 활성 공연(state/genre 필터)이 있는 공연장 마커 전체 반환.
  *
- * 클러스터러는 마커 전체를 한번에 받아야 줌 레벨에 따라 올바르게 동작함.
- * bounds 기반 재요청은 마커 세트를 뷰마다 교체해 클러스터 값이 불일치하는 원인이 됨.
- *
- * 쿼리 체인:
- *   prfm(state="공연중") → venue(전체 range 페이지네이션, venuenm 매칭)
- *   → venuedetail(venueid .in(), 청크) → 좌표 조립
- *
- * venue 전체를 range로 가져오는 이유:
- *   .in("venuenm", 한글배열)은 URL 인코딩 시 글자당 ~9byte → HeadersOverflowError 발생.
- *   venueid(단순 ASCII 코드)로만 .in()을 사용해 안전하게 처리.
+ * prfm → prfmdetail(venueid) → venuedetail(좌표) 순으로 venueid 기반 조인.
+ * 기존 venuenm 문자열 매칭은 이름 차이로 탈락하는 버그가 있어 교체함.
  */
 
 const SUPABASE_LIMIT = 10_000;
+const CHUNK = 300;
 
-async function fetchAllVenues(): Promise<{ venueid: string; venuenm: string }[]> {
-  const rows: { venueid: string; venuenm: string }[] = [];
-  const BATCH = 1000;
-  let from = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from("venue")
-      .select("venueid, venuenm")
-      .range(from, from + BATCH - 1);
-    if (error) throw error;
-    if (!data?.length) break;
-    rows.push(...(data as { venueid: string; venuenm: string }[]));
-    if (data.length < BATCH) break;
-    from += BATCH;
-  }
-  return rows;
-}
-
-async function fetchVenueCoords(
-  venueIds: string[]
-): Promise<{ venueid: string; la: number; lo: number }[]> {
-  const CHUNK = 300;
-  const chunks: string[][] = [];
-  for (let i = 0; i < venueIds.length; i += CHUNK) chunks.push(venueIds.slice(i, i + CHUNK));
-
-  const results = await Promise.all(
-    chunks.map(async (chunk) => {
-      const { data, error } = await supabase
-        .from("venuedetail")
-        .select("venueid, la, lo")
-        .in("venueid", chunk)
-        .not("la", "is", null)
-        .not("lo", "is", null);
-      if (error) throw error;
-      return (data ?? []) as { venueid: string; la: number; lo: number }[];
-    })
-  );
-  return results.flat();
+function chunk<T>(arr: T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += CHUNK) chunks.push(arr.slice(i, i + CHUNK));
+  return chunks;
 }
 
 export async function GET(req: NextRequest) {
@@ -66,57 +25,73 @@ export async function GET(req: NextRequest) {
   const states = (searchParams.get("states") ?? "").split(",").map(decodeURIComponent).filter(Boolean);
 
   try {
-    // ── 1 + 2 병렬: 선택된 상태/장르 기준 venue명 & venue 전체 목록 동시 조회 ──
-    let prfmQuery = supabase
-      .from("prfm")
-      .select("venuenm")
-      .limit(SUPABASE_LIMIT);
-
+    // 1. 필터 조건에 맞는 prfmid 조회
+    let prfmQuery = supabase.from("prfm").select("prfmid").limit(SUPABASE_LIMIT);
     if (states.length > 0) prfmQuery = prfmQuery.in("state", states);
     if (genres.length > 0) prfmQuery = prfmQuery.in("genrenm", genres);
 
-    const [activePrfmResult, allVenues] = await Promise.all([
-      prfmQuery,
-      fetchAllVenues(),
+    const { data: activePrfm, error: prfmErr } = await prfmQuery;
+    if (prfmErr) throw prfmErr;
+    if (!activePrfm?.length) return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: [] });
+
+    const prfmIds = activePrfm.map((p) => p.prfmid as string);
+
+    // 2. prfmid → venueid (prfmdetail, 청크)
+    const detailRows = (
+      await Promise.all(
+        chunk(prfmIds).map((c) =>
+          supabase.from("prfmdetail").select("venueid").in("prfmid", c)
+        )
+      )
+    ).flatMap((r) => r.data ?? []);
+
+    const venueIds = [...new Set(detailRows.map((d) => d.venueid as string))];
+    if (!venueIds.length) return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: [] });
+
+    // 3. venueid → 좌표 + 이름 병렬 조회 (청크)
+    const venueChunks = chunk(venueIds);
+    const [coordResults, nameResults] = await Promise.all([
+      Promise.all(
+        venueChunks.map((c) =>
+          supabase
+            .from("venuedetail")
+            .select("venueid, la, lo")
+            .in("venueid", c)
+            .not("la", "is", null)
+            .not("lo", "is", null)
+        )
+      ),
+      Promise.all(
+        venueChunks.map((c) =>
+          supabase.from("venue").select("venueid, venuenm").in("venueid", c)
+        )
+      ),
     ]);
 
-    if (activePrfmResult.error) throw activePrfmResult.error;
+    const coordMap = new Map(
+      coordResults
+        .flatMap((r) => r.data ?? [])
+        .map((c) => [c.venueid as string, { la: c.la as number, lo: c.lo as number }])
+    );
+    const nameMap = new Map(
+      nameResults
+        .flatMap((r) => r.data ?? [])
+        .map((v) => [v.venueid as string, v.venuenm as string])
+    );
 
-    const activePrfm = activePrfmResult.data ?? [];
-    if (!activePrfm.length || !allVenues.length) {
-      return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: [] });
-    }
-
-    // ── 3. 메모리 교차: 공연중 venue명 Set ↔ venue 전체 목록 ──
-    const activeVenueNmSet = new Set(activePrfm.map((p) => p.venuenm).filter(Boolean));
-
-    const activeVenueRows = allVenues.filter((v) => activeVenueNmSet.has(v.venuenm));
-    if (!activeVenueRows.length) {
-      return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: [] });
-    }
-
-    const activeVenueIds = activeVenueRows.map((v) => v.venueid);
-    const idToName = new Map(activeVenueRows.map((v) => [v.venueid, v.venuenm]));
-
-    // ── 4. 활성 venueid로 좌표 조회 (venueid는 ASCII 코드라 .in() 안전) ──
-    const coords = await fetchVenueCoords(activeVenueIds);
-    if (!coords.length) {
-      return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: [] });
-    }
-
-    // ── 5. 결과 조립 ──
-    const result: VenueMarker[] = coords
-      .filter((c) => idToName.has(c.venueid) && c.la && c.lo)
-      .map((c) => ({
-        id: c.venueid,
-        name: idToName.get(c.venueid)!,
-        latitude: c.la,
-        longitude: c.lo,
-      }));
+    // 4. 조립
+    const result: VenueMarker[] = venueIds
+      .map((id) => {
+        const coord = coordMap.get(id);
+        const name = nameMap.get(id);
+        if (!coord || !name) return null;
+        return { id, name, latitude: coord.la, longitude: coord.lo };
+      })
+      .filter((v): v is VenueMarker => v !== null);
 
     return NextResponse.json<ApiResponse<VenueMarker[]>>({ data: result });
   } catch (err) {
-    console.error(err);
+    console.error("[/api/venues]", err);
     return NextResponse.json<ApiResponse<null>>(
       { data: null, error: "서버 오류가 발생했습니다." },
       { status: 500 }

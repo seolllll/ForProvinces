@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronLeft, SlidersHorizontal } from "lucide-react";
 import { useMapStore } from "@/store/mapStore";
 import { KOPIS_GENRES } from "@/types";
@@ -10,6 +10,10 @@ const PRFM_STATES = ["공연중", "공연예정", "공연완료"] as const;
 
 export default function GenreFilter() {
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (window.innerWidth < 640) setCollapsed(true);
+  }, []);
   const { activeGenres, toggleGenre, activeStates, toggleState } = useMapStore();
 
   function handleGenreToggle(genre: string) {

@@ -29,16 +29,16 @@ forProvinces/
 │   ├── app/
 │   │   ├── page.tsx
 │   │   └── api/
-│   │       ├── areas/route.ts                    # GET: code_mng codeSe='area' 목록
-│   │       ├── areas/catecodes/route.ts           # GET: code_mng codeSe='catecode' 목록
-│   │       ├── ranking/route.ts                   # GET: prfm_ranking 조회 (area+catecode+최근crdt)
+│   │       ├── areas/route.ts
+│   │       ├── areas/catecodes/route.ts
+│   │       ├── ranking/route.ts
 │   │       ├── venues/route.ts
 │   │       ├── venues/[id]/route.ts
 │   │       ├── venues/[id]/performances/route.ts
 │   │       ├── prfm/[id]/route.ts
 │   │       ├── prfm/search/route.ts
 │   │       ├── prfm/by-region/route.ts
-│   │       ├── sync-ranking/route.ts             # POST: [DEV] 공연 순위 수집
+│   │       ├── sync-ranking/route.ts
 │   │       ├── sync-venues/route.ts
 │   │       ├── sync-prfm/route.ts
 │   │       └── sync-prfm-detail/route.ts
@@ -48,11 +48,13 @@ forProvinces/
 │   │   ├── search/SearchBar.tsx
 │   │   ├── sidebar/PerformanceSidebar.tsx
 │   │   ├── sidebar/PerformanceDetail.tsx
-│   │   ├── sidebar/RegionPerformancePanel.tsx    # 우측 패널 — 지역+장르 select → 순위 목록
-│   │   ├── debug/SyncVenuesButton.tsx
-│   │   ├── debug/SyncPrfmButton.tsx
-│   │   ├── debug/SyncPrfmDetailButton.tsx
-│   │   └── debug/SyncRankingButton.tsx
+│   │   ├── sidebar/RegionPerformancePanel.tsx
+│   │   └── debug/
+│   │       ├── DevPanel.tsx                         # DEV 버튼 그룹 접기/펼치기 래퍼
+│   │       ├── SyncVenuesButton.tsx
+│   │       ├── SyncPrfmButton.tsx
+│   │       ├── SyncPrfmDetailButton.tsx
+│   │       └── SyncRankingButton.tsx
 │   ├── lib/
 │   │   ├── supabase.ts
 │   │   └── utils.ts
@@ -62,11 +64,11 @@ forProvinces/
 │   ├── index.ts
 │   ├── apis/venue.ts, venueDetail.ts, prfm.ts, prfmDetail.ts, ranking.ts
 │   ├── types/prfm.ts, ranking.ts
-│   ├── mappers/                                  # XML → DB 행 변환
+│   ├── mappers/
 │   └── utils/supabase.ts, fetchKopis.ts, xmlParser.ts, delay.ts, dateHelper.ts
 ├── supabase/
 │   └── migrations/
-│       └── 20260604_create_ranking.sql           # prfm_ranking 테이블 DDL
+│       └── 20260604_create_ranking.sql
 └── HANDOFF.md
 ```
 
@@ -86,7 +88,7 @@ forProvinces/
 - [x] `SyncPrfmButton`, `SyncVenuesButton`: 날짜 입력 → YYYYMMDD 변환 후 body 포함
 
 **검색 기능 (2026-06-02)**
-- [x] `GET /api/prfm/search?q=&genres=` — 공연명 ilike, 장르 필터, 최대 10건
+- [x] `GET /api/prfm/search?q=&states=` — 공연명 ilike, 공연 상태 필터, 최대 10건 (장르 필터 없음 — 전체 검색)
 - [x] `SearchBar.tsx` — 300ms 디바운스, 드롭다운 결과 클릭 → 지도 줌인 + 상세 직행
 - [x] 선택 마커 이미지 교체 (`markerMap`, `useMapStore.subscribe`)
 
@@ -104,45 +106,48 @@ forProvinces/
 ---
 
 **공연 순위 스케줄러 (2026-06-04)**
-- [x] `scheduler/types/ranking.ts`: `KopisRankingDb`, `RankingRow` (catecode 필드 포함)
-- [x] `scheduler/mappers/rankingMapper.ts`: `mapRanking(db, catecode)` — XML → RankingRow
-- [x] `scheduler/apis/ranking.ts`: area × catecode 조합 수집, 중복 방지(crdt 확인), 100ms 딜레이
+- [x] `scheduler/types/ranking.ts`, `scheduler/mappers/rankingMapper.ts`, `scheduler/apis/ranking.ts`
 - [x] `scheduler/index.ts`: 매일 05:00 KST cron 등록
 
 **DEV 공연 순위 수집 버튼 (2026-06-04)**
-- [x] `POST /api/sync-ranking` — 스케줄러와 동일 로직, node:http 사용
-- [x] `SyncRankingButton.tsx` — 🏆 [DEV] 순위 수집
+- [x] `POST /api/sync-ranking`, `SyncRankingButton.tsx`
 
 ---
 
 **공연 순위 수집 버그 수정 (2026-06-04)**
-- [x] **500 에러 원인**: `prfm_ranking` 테이블 미생성 → `supabase/migrations/20260604_create_ranking.sql` 작성
-- [x] **테이블명**: `ranking` → `prfm_ranking` 으로 통일 (route.ts, scheduler/apis/ranking.ts 모두 수정)
-- [x] **WAF 차단 해결**: boxoffice 엔드포인트가 `Accept-Encoding` 없으면 HTTP 400 차단
-  - `sync-ranking/route.ts` KOPIS_HEADERS에 `Accept-Encoding: gzip, deflate`, `Connection: keep-alive`, `Cache-Control: max-age=0`, `Upgrade-Insecure-Requests: 1` 추가
-  - `zlib` import + `content-encoding` 헤더 감지해 gzip/deflate 자동 디코딩 추가
-- [x] **XML 파싱 태그 수정**: boxoffice API 응답은 `<dbs><db>` 아니라 `<boxofs><boxof>` 구조
-  - `isArray: ["boxof"]`, `parsed?.boxofs?.boxof` 로 수정
-- [x] **catecode 컬럼 추가**: 요청 파라미터 `catecode` 값을 `prfm_ranking.catecode`에 저장
-  - `RankingRow`에 `catecode: string` 추가
-  - `mapRanking(db, catecode)` 두 번째 인자 추가
-  - `scheduler/apis/ranking.ts`, `src/app/api/sync-ranking/route.ts` rows에 `catecode` 포함
-- [x] **Supabase id 컬럼**: `bigserial` → `GENERATED ALWAYS AS IDENTITY` 로 DDL 수정 (기존 테이블은 시퀀스 수동 연결 필요)
+- [x] `prfm_ranking` 테이블 DDL, 테이블명 통일, WAF 차단 해결 (Accept-Encoding + zlib)
+- [x] boxoffice XML 태그 수정 (`<boxofs><boxof>`), catecode 컬럼 추가
 
 **지역별 공연 순위 패널 완성 (2026-06-04)**
-- [x] `GET /api/areas/catecodes` 신규: `code_mng.codeSe='catecode'` 목록 반환
-- [x] `GET /api/ranking?area=&catecode=` 신규:
-  - `prfm_ranking`에서 가장 최근 `crdt` 자동 조회
-  - `WHERE area = #{area} AND catecode = #{catecode} AND crdt = #{최근crdt}` 필터
-  - `rank` 오름차순 정렬, 응답에 `crdt` 포함
-- [x] `RegionPerformancePanel.tsx` 전면 개편:
-  - 지역 버튼 목록 → **지역 select + 장르 select** 두 개
-  - 지역 select: `value={a.codeNm}` (area 이름으로 필터)
-  - 장르 select: `value={c.code}` (catecode 코드값으로 필터), 표시는 `codeNm`
-  - 초기값: 각 목록의 첫 번째 항목 자동 선택
-  - 선택 변경 시 즉시 `/api/ranking` 호출 → 순위 목록 렌더링
-  - 1~3위 보라색 배지, 나머지 회색 배지
-  - 헤더에 기준 수집일(`crdt`) 표시
+- [x] `GET /api/areas/catecodes`, `GET /api/ranking?area=&catecode=`
+- [x] `RegionPerformancePanel.tsx`: 지역 select + 장르 select → 순위 목록
+
+---
+
+**모바일 반응형 레이아웃 (2026-06-05)**
+
+- [x] **SearchBar**: 모바일에서 `w-full`, `left-14 right-24` (GenreFilter·DevPanel 버튼 사이 전체 너비). sm+ 에서 `w-80` 중앙 고정
+- [x] **GenreFilter**: 모바일(`< 640px`) 마운트 시 자동 collapsed. `useEffect`에서 `window.innerWidth` 체크
+- [x] **PerformanceSidebar**: 모바일에서 하단 sheet (`bottom-0 left-0 right-0 h-[80vh] rounded-t-2xl`, `translate-y` 슬라이드). sm+ 에서 우측 슬라이드 유지. 모바일 배경 오버레이(`z-[9]`) 클릭으로 닫기 추가
+- [x] **RegionPerformancePanel**: 모바일에서 우하단 플로팅 원형 버튼(`fixed bottom-20 right-4`) + 하단 sheet (`h-[60vh] rounded-t-2xl`). sm+ 에서 우측 세로 탭 유지. 패널 내용을 `panelContent` JSX 변수로 분리하여 데스크탑/모바일 공유. 모바일 배경 오버레이(`z-[8]`) 추가
+
+---
+
+**UI·UX 개선 (2026-06-05)**
+
+- [x] **RegionPerformancePanel 토글 탭**: X 버튼 제거. 패널 왼쪽에 세로 탭 버튼(`BarChart2` 아이콘 + "지역별 순위" 세로 텍스트)이 항상 붙어있고 클릭 시 패널 열기/닫기. 기본값: 닫힘
+- [x] **DEV 버튼 그룹화**: `DevPanel.tsx` 신규 — "DEV ▼" 버튼 하나로 접기/펼치기. `page.tsx`에서 4개 개별 import 제거 후 `<DevPanel />` 단일 사용
+- [x] **검색 전체 검색 전환**: `SearchBar.tsx` — 장르 파라미터 제거, 공연 상태만 필터 (`states` 파라미터). `/api/prfm/search` 장르 필터 코드 제거
+- [x] **검색 상태 필터 규칙**: 공연중·공연예정은 항상 검색 포함. 공연완료는 필터에서 선택된 경우에만 추가
+- [x] **검색 → 장르 자동 전환**: 검색 결과 클릭 시 해당 공연의 장르가 `activeGenres`에 없으면 자동 활성화 + 토스트 `'OOO 필터가 선택되었습니다'` (3초 후 소멸)
+- [x] **순위 클릭 → 공연 상세 직행**: `/api/ranking` 응답에 `venueid`, `la`, `lo`, `state` 추가 (prfmdetail·venuedetail·prfm 조인). 클릭 시 `setZoomTarget` + `selectVenue` + `setPendingPrfmId` — 검색과 동일한 흐름
+- [x] **순위 클릭 → 상태 자동 전환**: 해당 공연 state가 `activeStates`에 없으면 자동 활성화 + 토스트
+- [x] **순위 숫자 스타일**: 원형 배지 제거, 숫자만 표기. 1위 보라색, 2위 보라색, 3위 보라색, 나머지 회색 (사용자가 직접 조정함)
+- [x] **mapStore 액션 추가**: `enableGenre(genre)` — 이미 있으면 무시, 없으면 추가. `enableState(state)` — 동일. `openDirectPrfm(prfmId)` — venue 없이 사이드바 직행 (현재 미사용, 순위는 venueid 기반 직행으로 전환)
+
+**버그 수정 (2026-06-05)**
+
+- [x] **마커 미표시 버그** (`/api/venues`): `prfm.venuenm ↔ venue.venuenm` 문자열 매칭으로 조인하던 로직을 `prfm → prfmdetail.venueid → venuedetail.좌표` venueid 기반 조인으로 전면 교체. 이름이 조금이라도 다른 공연장(예: FC001213)이 마커에서 누락되던 문제 해결
 
 ### 🔄 진행 중
 
@@ -157,7 +162,7 @@ forProvinces/
 
 **추가 기능**
 - [ ] 캐스팅 페어 UI (prfmcast 텍스트 → 구조화된 페어 카드)
-- [ ] 모바일 반응형 레이아웃
+- [x] 모바일 반응형 레이아웃
 - [ ] 공연 즐겨찾기 / 알림 (예매일 기반 push)
 - [ ] 공연 상세 URL share (SEO / OG 메타태그)
 
@@ -168,19 +173,18 @@ forProvinces/
 ### prfm_ranking 테이블 DDL
 
 ```sql
--- supabase/migrations/20260604_create_ranking.sql 참고
 CREATE TABLE public.prfm_ranking (
   id         bigint       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  genrenm    text         NOT NULL,   -- KOPIS XML <cate> 값 (예: 복합, 연극)
+  genrenm    text         NOT NULL,
   rank       integer      NOT NULL,
   prfmnm     text         NOT NULL,
   period     text,
   venuenm    text,
   prfdtcnt   integer,
-  area       text,                    -- KOPIS XML <area> 값 (예: 서울, 부산)
+  area       text,
   posterurl  text,
   prfmid     text,
-  catecode   text,                    -- 요청 파라미터 catecode 값 (예: CCCA, CCCD)
+  catecode   text,
   crdt       date         NOT NULL,
   created_at timestamptz  DEFAULT now()
 );
@@ -201,15 +205,10 @@ CREATE TABLE public.prfm_ranking (
 - **조합 수집**: `code_mng(area)` × `code_mng(catecode)` 전체 순열 → 각각 KOPIS boxoffice API 호출
 - **KOPIS 파라미터**: `stdate`=어제, `eddate`=어제+1달, `area`=code, `catecode`=code
 - **catecode 저장**: API 요청에 사용한 `catecode` 값을 `prfm_ranking.catecode` 컬럼에 함께 저장
-- **DEV와 스케줄러**: `sync-ranking/route.ts`와 `scheduler/apis/ranking.ts` 동일 로직
 
 ### boxoffice WAF 차단 해결
 
-- **현상**: KOPIS boxoffice(`/openApi/restful/boxoffice`) 엔드포인트는 WAF가 엄격해 `Accept-Encoding` 없는 요청을 HTTP 400으로 차단
-- **다른 엔드포인트와 비교**:
-  - `prfplc` (venue): Next.js global `fetch` 사용 → 정상
-  - `pblprfr` (prfm): Next.js global `fetch` → WAF 차단 → `node:http` 직접 사용으로 해결
-  - `boxoffice` (ranking): `node:http` + 3개 헤더만으로도 차단 → 헤더 추가 필요
+- **현상**: KOPIS boxoffice 엔드포인트는 WAF가 엄격해 `Accept-Encoding` 없는 요청을 HTTP 400으로 차단
 - **해결**: KOPIS_HEADERS에 `Accept-Encoding: gzip, deflate` 포함 전체 브라우저 헤더 세트 적용
 - **주의**: `Accept-Encoding` 선언 시 서버가 gzip 응답 가능 → `zlib`으로 `content-encoding` 감지 후 자동 디코딩
 
@@ -225,7 +224,6 @@ CREATE TABLE public.prfm_ranking (
     <prfdtcnt>2</prfdtcnt>
     <area>부산</area>
     <prfplcnm>공연장명</prfplcnm>
-    <seatcnt>300</seatcnt>
     <poster>http://...</poster>
     <mt20id>PF291043</mt20id>
   </boxof>
@@ -239,10 +237,12 @@ CREATE TABLE public.prfm_ranking (
 ### 공연 순위 조회 API 설계
 
 - **엔드포인트**: `GET /api/ranking?area=서울&catecode=CCCA`
-- **area 필터값**: `code_mng(area).codeNm` (지역 한글명 — `prfm_ranking.area`와 동일한 값)
-- **catecode 필터값**: `code_mng(catecode).code` (KOPIS 코드값 — `prfm_ranking.catecode`와 동일한 값)
+- **area 필터값**: `code_mng(area).codeNm` (지역 한글명)
+- **catecode 필터값**: `code_mng(catecode).code` (KOPIS 코드값)
 - **날짜**: 파라미터 없이 자동으로 `MAX(crdt)` 조회 후 사용
-- **SQL**: `WHERE area = #{area} AND catecode = #{catecode} AND crdt = #{최근crdt} ORDER BY rank`
+- **응답에 포함**: `rank`, `prfmnm`, `venuenm`, `period`, `prfdtcnt`, `posterurl`, `prfmid`, `venueid`, `la`, `lo`, `state`
+  - `venueid`/`la`/`lo`: prfmdetail + venuedetail 조인으로 추가
+  - `state`: prfm 테이블 조인으로 추가
 
 ### RegionPerformancePanel select 값 설계
 
@@ -251,35 +251,57 @@ CREATE TABLE public.prfm_ranking (
 | 지역 | `codeNm` (한글명) | `codeNm` | `prfm_ranking.area` |
 | 장르 | `code` (CCCA 등) | `codeNm` | `prfm_ranking.catecode` |
 
-- 지역은 한글명(`codeNm`)으로 필터 — KOPIS XML `<area>` 값과 동일
-- 장르는 코드값(`code`)으로 필터 — 수집 시 저장한 `catecode`와 동일
-
 ### 검색 기능 설계
 
-- **배치**: `absolute left-1/2 top-4 -translate-x-1/2` 지도 상단 중앙 고정
-- **장르 필터 연동**: `activeGenres`를 store에서 읽어 검색 쿼리에 포함
-- **결과 클릭 흐름**: `setZoomTarget` → `setPendingPrfmId` → `selectVenue`
-- **pendingPrfmId**: PerformanceSidebar가 변경 감지 → `handlePrfmClick` 자동 호출 후 null 초기화
+- **장르**: 전체 검색 (genres 파라미터 없음)
+- **상태**: `states` 파라미터로 API 전달. 항상 공연중·공연예정 포함, 공연완료는 `activeStates`에 있을 때만 추가
+- **결과 클릭 흐름**: 장르 자동 전환(`enableGenre`) → `setZoomTarget` → `setPendingPrfmId` → `selectVenue`
+- **토스트**: 장르/상태 자동 전환 시 `'OOO 필터가 선택되었습니다'` 3초 표시
+
+### 순위 클릭 흐름
+
+검색 결과 클릭과 동일:
+1. 상태 자동 전환 필요 시 `enableState` + 토스트
+2. `setZoomTarget({ lat, lng, level: 4 })`
+3. `selectVenue(venueid)` — 사이드바 열기
+4. `setPendingPrfmId(prfmid)` — PerformanceSidebar가 감지 → 공연 상세 자동 진입
+
+### /api/venues 마커 조인 방식
+
+**구 방식 (버그)**: `prfm.venuenm ↔ venue.venuenm` 문자열 매칭 → 이름 불일치 시 마커 누락  
+**현 방식**: `prfm(prfmid) → prfmdetail(venueid) → venuedetail(la, lo)` venueid 기반 조인
+
+### mapStore 액션 목록
+
+| 액션 | 설명 |
+|------|------|
+| `setBounds` | 지도 bounds 업데이트 |
+| `selectVenue(id)` | 공연장 선택 + 사이드바 열기 |
+| `setVenueMarkers` | 마커 목록 업데이트 |
+| `toggleGenre(genre)` | 장르 토글 (최소 1개 강제) |
+| `enableGenre(genre)` | 장르 강제 활성화 (이미 있으면 무시) |
+| `toggleState(state)` | 상태 토글 (최소 1개 강제) |
+| `enableState(state)` | 상태 강제 활성화 (이미 있으면 무시) |
+| `closeSidebar` | 사이드바 닫기 |
+| `setZoomTarget` | 지도 이동 트리거 |
+| `setPendingPrfmId` | 공연 상세 자동 진입 트리거 |
+| `openDirectPrfm` | venue 없이 사이드바+상세 직행 (현재 미사용) |
 
 ### crdt 컬럼 형식
 
 - **DB 저장**: `date` 타입, `"YYYY-MM-DD"` 포맷
 - **KOPIS API 파라미터**: `"YYYYMMDD"` 포맷 (혼동 주의)
-- **스케줄러**: `getTodayISODate()` 사용
-- **Next.js API**: `new Date().toISOString().slice(0, 10)`
 
 ### DEV route에서 node:http를 사용하는 이유
 
 - Next.js App Router global `fetch` 패치 → 내부 헤더 추가 → KOPIS WAF HTTP 400 차단
 - `node:http`/`node:https` 직접 사용으로 전송 헤더 완전 제어
 - **새 KOPIS API 호출 코드 작성 시 동일 패턴 적용 필수**
-- `sync-venues`는 prfplc 엔드포인트, WAF 차단 없어 global fetch 유지
 
 ### 기타 설계 결정
 
 - **relates 컬럼**: `prfmdetail.relates` — `text` nullable. 저장: `JSON.stringify`, 읽기: `JSON.parse` + null 체크 필수
 - **클러스터러**: 초기화 시 전체 1회 fetch → 클러스터러 전체 등록 (bounds_changed 재요청 X)
-- **venue 전체 조회**: range 페이지네이션으로 로컬 로드 후 메모리 교차 (`.in()`은 ASCII venueid에만 사용)
 - **sync-prfm-detail 재시작**: 실패 시 로그 `page N` 확인 → DEV 버튼 startPage 입력란에 N 입력
 - **Kakao Map 생성자 이름 충돌**: `const { Map: KakaoMapCtor, ... } = window.kakao.maps` — 내장 `Map`과 이름 충돌 방지 rename 유지 필수
 
@@ -292,31 +314,32 @@ CREATE TABLE public.prfm_ranking (
 | 파일 | 역할 |
 |------|------|
 | `src/types/index.ts` | 전체 TypeScript 타입. `AreaCode`, `VenueMarker`, `VenueInfo`, `VenuePerformance`, `RegionPerformance`, `SearchResult`, `KopisPrfmFull`, `KopisRelate`, `ApiResponse` |
-| `src/store/mapStore.ts` | Zustand — bounds, selectedVenueId, venueMarkers, activeGenres, activeStates, isSidebarOpen, zoomTarget, pendingPrfmId |
+| `src/store/mapStore.ts` | Zustand — bounds, selectedVenueId, venueMarkers, activeGenres, activeStates, isSidebarOpen, zoomTarget, pendingPrfmId. `enableGenre`, `enableState`, `openDirectPrfm` 포함 |
 | `src/lib/supabase.ts` | Supabase 클라이언트 싱글턴 |
 | `src/lib/utils.ts` | `cn()` 유틸 |
-| `src/app/api/areas/route.ts` | `code_mng` codeSe='area' 목록 반환 (code, codeNm) |
-| `src/app/api/areas/catecodes/route.ts` | `code_mng` codeSe='catecode' 목록 반환 (code, codeNm) |
-| `src/app/api/ranking/route.ts` | prfm_ranking 조회. area+catecode 필터, MAX(crdt) 자동 기준 |
-| `src/app/api/venues/route.ts` | genres·states 필터 기반 공연장 전체 반환 |
+| `src/app/api/areas/route.ts` | `code_mng` codeSe='area' 목록 반환 |
+| `src/app/api/areas/catecodes/route.ts` | `code_mng` codeSe='catecode' 목록 반환 |
+| `src/app/api/ranking/route.ts` | prfm_ranking 조회. area+catecode 필터, MAX(crdt) 자동 기준. venueid·la·lo·state 포함 (prfmdetail·venuedetail·prfm 조인) |
+| `src/app/api/venues/route.ts` | prfm→prfmdetail(venueid)→venuedetail(좌표) venueid 기반 조인. genres·states 필터 |
 | `src/app/api/venues/[id]/route.ts` | 공연장 상세 (venue+venuedetail+theatre 통합) |
 | `src/app/api/venues/[id]/performances/route.ts` | 시설별 공연 목록. genres·states 필터 지원 |
 | `src/app/api/prfm/[id]/route.ts` | 공연 상세. prfm+prfmdetail 조인, relates JSON.parse |
-| `src/app/api/prfm/search/route.ts` | 공연명 ilike 검색. genres 필터. 최대 10건 |
-| `src/app/api/prfm/by-region/route.ts` | 지역별 공연 목록. sidonm ilike → prfm 교차 → venuedetail 좌표. 최대 200건 |
-| `src/app/api/sync-ranking/route.ts` | [DEV] 공연 순위 수집. code_mng → area×catecode 조합 → prfm_ranking insert. node:http + zlib |
-| `src/app/api/sync-prfm/route.ts` | [DEV] 공연 목록+상세 수집. afterdate 파라미터 지원 |
+| `src/app/api/prfm/search/route.ts` | 공연명 ilike 전체 검색. states 필터만 적용. 최대 10건 |
+| `src/app/api/prfm/by-region/route.ts` | 지역별 공연 목록. 최대 200건 |
+| `src/app/api/sync-ranking/route.ts` | [DEV] 공연 순위 수집. node:http + zlib |
+| `src/app/api/sync-prfm/route.ts` | [DEV] 공연 목록 수집. afterdate 파라미터 지원 |
 | `src/app/api/sync-venues/route.ts` | [DEV] 공연시설 수집. afterdate 파라미터 지원 |
-| `src/app/api/sync-prfm-detail/route.ts` | [DEV] relates update. 딜레이 500ms, WAF 재시도, startPage 재시작 |
+| `src/app/api/sync-prfm-detail/route.ts` | [DEV] relates update. startPage 재시작 지원 |
 | `src/components/map/KakaoMap.tsx` | 카카오맵 초기화. markerMap 선택 마커 이미지 교체. zoomTarget 구독 |
 | `src/components/filter/GenreFilter.tsx` | 좌측 고정 패널 — 장르 9개 + 상태 3개. 접기/펼치기 |
-| `src/components/search/SearchBar.tsx` | 검색바. 상단 중앙 고정. 300ms 디바운스. 장르 필터 연동. 결과 클릭 → 줌 + 상세 직행 |
-| `src/components/sidebar/RegionPerformancePanel.tsx` | 우측 고정 패널(w-64). 지역 select + 장르 select → 공연 순위 목록 표시. 기준일 표시 |
+| `src/components/search/SearchBar.tsx` | 검색바. 전체 검색(장르 무관), states 필터. 결과 클릭 → 장르 자동 전환 + 토스트 + 줌 + 상세 직행 |
+| `src/components/sidebar/RegionPerformancePanel.tsx` | 우측 탭 토글 패널. 기본 닫힘. 탭 버튼 항상 표시. 순위 클릭 → 상태 자동 전환 + 토스트 + 지도이동 + 상세 직행 |
 | `src/components/sidebar/PerformanceSidebar.tsx` | 마커 클릭 → 공연장 정보 + 상태별 공연 목록. pendingPrfmId 구독 → 상세 자동 진입 |
 | `src/components/sidebar/PerformanceDetail.tsx` | 공연 상세 뷰 — 포스터, 기본정보, 출연진, 티켓가격, 제작사, 예매처 링크 |
-| `src/components/debug/SyncRankingButton.tsx` | [DEV] 순위 수집 트리거. 결과: N건 수집 완료 / ⏭️ 이미 수집 완료 |
-| `src/components/debug/SyncVenuesButton.tsx` | [DEV] afterdate 날짜 입력(기본 빈값=전체) + 수집 트리거 |
-| `src/components/debug/SyncPrfmButton.tsx` | [DEV] afterdate 날짜 입력(기본 오늘) + 수집 트리거 |
+| `src/components/debug/DevPanel.tsx` | [DEV] 4개 sync 버튼 접기/펼치기 래퍼. "DEV ▼" 버튼 토글 |
+| `src/components/debug/SyncRankingButton.tsx` | [DEV] 순위 수집 트리거 |
+| `src/components/debug/SyncVenuesButton.tsx` | [DEV] afterdate 날짜 입력 + 수집 트리거 |
+| `src/components/debug/SyncPrfmButton.tsx` | [DEV] afterdate 날짜 입력 + 수집 트리거 |
 | `src/components/debug/SyncPrfmDetailButton.tsx` | [DEV] startPage 입력 포함 |
 
 ### 스케줄러
@@ -325,8 +348,8 @@ CREATE TABLE public.prfm_ranking (
 |------|------|
 | `scheduler/index.ts` | cron 등록 (공연시설: 매주 월 03:00 / 공연: 매일 04:00 / 순위: 매일 05:00 KST) |
 | `scheduler/apis/ranking.ts` | 공연 순위 수집. code_mng → area×catecode → KOPIS boxoffice → prfm_ranking insert |
-| `scheduler/types/ranking.ts` | `KopisRankingDb` (API XML 필드), `RankingRow` (catecode 포함) |
-| `scheduler/mappers/rankingMapper.ts` | `mapRanking(db, catecode)` — XML → RankingRow. catecode 두 번째 인자 |
+| `scheduler/types/ranking.ts` | `KopisRankingDb`, `RankingRow` (catecode 포함) |
+| `scheduler/mappers/rankingMapper.ts` | `mapRanking(db, catecode)` — XML → RankingRow |
 | `scheduler/utils/dateHelper.ts` | `getTodayISODate`, `getYesterdayYYYYMMDD`, `getMonthLaterYYYYMMDD` 등 |
 
 ---
@@ -356,13 +379,9 @@ CRON_SECRET=...
 - `sync-venues`, `sync-prfm`, `sync-prfm-detail`, `sync-ranking` Bearer 인증 추가
 - `SyncVenuesButton`, `SyncPrfmButton`, `SyncRankingButton` AbortController timeout 추가
 
-### 우선순위 2 — UX 버그
+### 우선순위 2 — 추가 기능
 
-- **검색 → 동일 공연장 상세 직행**: `pendingPrfmId` 세팅되어도 `selectedVenueId`가 안 바뀌면 venue 로딩 effect 미트리거 → `pendingPrfmId` 단독 effect에서 직접 처리 필요
-
-### 우선순위 3 — 추가 기능
-
-- 캐스팅 페어 UI, 모바일 반응형, 공연 즐겨찾기·알림, 공연 상세 URL share
+- 캐스팅 페어 UI, 공연 즐겨찾기·알림, 공연 상세 URL share
 
 ---
 
@@ -374,7 +393,7 @@ CRON_SECRET=...
 |------|------|------|
 | **인증 없는 POST** | sync-* 라우트 4개 | Bearer 인증 없음 |
 | **fetch timeout 없음** | DEV 버튼들 | ranking 수집 수십 초 이상 소요 가능 |
-| **DEV 버튼 노출** | `page.tsx` | dev 환경 조건 처리 필수 |
+| **DEV 버튼 노출** | `DevPanel.tsx` | dev 환경 조건 처리 필수 |
 
 ### ⚠️ 특이사항
 
@@ -392,7 +411,7 @@ CRON_SECRET=...
 
 - **relates 파싱**: `prfmdetail.relates`는 text. 읽을 때 `JSON.parse` + null 체크 필수
 
-- **venuenm 불일치**: `prfm.venuenm`과 `venue.venuenm`이 다르면 마커 미표시
+- **검색 상태 필터**: 공연중·공연예정은 activeStates 무관 항상 포함. 공연완료만 activeStates 조건부
 
 - **SyncRankingButton 응답 지연**: area×catecode 조합 × 100ms → 수십 초 소요. 정상 동작
 

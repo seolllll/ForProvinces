@@ -23,10 +23,13 @@ interface MapState {
   selectVenue: (venueId: string | null) => void;
   setVenueMarkers: (markers: VenueMarker[]) => void;
   toggleGenre: (genre: string) => void;
+  enableGenre: (genre: string) => void;
   toggleState: (state: string) => void;
+  enableState: (state: string) => void;
   closeSidebar: () => void;
   setZoomTarget: (target: ZoomTarget | null) => void;
   setPendingPrfmId: (prfmId: string | null) => void;
+  openDirectPrfm: (prfmId: string) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -58,6 +61,20 @@ export const useMapStore = create<MapState>((set) => ({
       return { activeGenres: [...state.activeGenres, genre] };
     }),
 
+  enableGenre: (genre) =>
+    set((state) =>
+      state.activeGenres.includes(genre)
+        ? state
+        : { activeGenres: [...state.activeGenres, genre] }
+    ),
+
+  enableState: (prfmState) =>
+    set((state) =>
+      state.activeStates.includes(prfmState)
+        ? state
+        : { activeStates: [...state.activeStates, prfmState] }
+    ),
+
   toggleState: (prfmState) =>
     set((state) => {
       if (state.activeStates.includes(prfmState)) {
@@ -73,4 +90,7 @@ export const useMapStore = create<MapState>((set) => ({
   setZoomTarget: (target) => set({ zoomTarget: target }),
 
   setPendingPrfmId: (prfmId) => set({ pendingPrfmId: prfmId }),
+
+  openDirectPrfm: (prfmId) =>
+    set({ isSidebarOpen: true, selectedVenueId: null, pendingPrfmId: prfmId }),
 }));

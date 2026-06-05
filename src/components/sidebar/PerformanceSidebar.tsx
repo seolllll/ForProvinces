@@ -129,10 +129,24 @@ export default function PerformanceSidebar() {
   }
 
   return (
+    <>
+      {/* 모바일 전용 배경 오버레이 */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-[9] bg-black/30 sm:hidden"
+          onClick={closeSidebar}
+        />
+      )}
     <aside
       className={cn(
-        "absolute right-0 top-0 z-10 h-full w-96 overflow-y-auto bg-background shadow-xl transition-transform duration-300",
-        isSidebarOpen ? "translate-x-0" : "translate-x-full"
+        "absolute z-10 overflow-y-auto bg-background shadow-xl transition-transform duration-300",
+        // 모바일: 하단 sheet
+        "bottom-0 left-0 right-0 h-[80vh] rounded-t-2xl",
+        // sm+: 우측 슬라이드
+        "sm:bottom-auto sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-96 sm:rounded-none",
+        isSidebarOpen
+          ? "translate-y-0 sm:translate-x-0 sm:translate-y-0"
+          : "translate-y-full sm:translate-y-0 sm:translate-x-full",
       )}
     >
       {/* 헤더 */}
@@ -223,5 +237,6 @@ export default function PerformanceSidebar() {
         )}
       </div>
     </aside>
+    </>
   );
 }

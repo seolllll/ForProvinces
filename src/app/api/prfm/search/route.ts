@@ -8,20 +8,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json<ApiResponse<SearchResult[]>>({ data: [] });
   }
 
-  const genres = (req.nextUrl.searchParams.get("genres") ?? "")
+  const states = (req.nextUrl.searchParams.get("states") ?? "")
     .split(",")
     .map(decodeURIComponent)
     .filter(Boolean);
 
   try {
-    // 1. prfm 검색 (장르 필터 적용, 상태는 전체 포함)
+    // 1. prfm 전체 검색 (공연 상태 필터 적용, 장르 필터 없음)
     let prfmQuery = supabase
       .from("prfm")
       .select("prfmid, prfmnm, venuenm, state, genrenm, posterurl")
       .ilike("prfmnm", `%${q}%`)
       .limit(30);
 
-    if (genres.length > 0) prfmQuery = prfmQuery.in("genrenm", genres);
+    if (states.length > 0) prfmQuery = prfmQuery.in("state", states);
 
     const { data: prfms, error: prfmErr } = await prfmQuery;
 
