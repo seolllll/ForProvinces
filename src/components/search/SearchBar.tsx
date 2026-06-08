@@ -20,7 +20,7 @@ export default function SearchBar({ className }: { className?: string }) {
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const { selectVenue, setZoomTarget, setPendingPrfmId, activeGenres, enableGenre, activeStates } = useMapStore();
+  const { selectVenue, setZoomTarget, setPendingPrfmId, activeGenres, enableGenre, activeStates, enableState } = useMapStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,9 +73,17 @@ export default function SearchBar({ className }: { className?: string }) {
   }, []);
 
   function handleSelect(result: SearchResult) {
+    const autoEnabled: string[] = [];
     if (result.genrenm && !activeGenres.includes(result.genrenm)) {
       enableGenre(result.genrenm);
-      setToastMsg(`'${result.genrenm}' 필터가 선택되었습니다`);
+      autoEnabled.push(`'${result.genrenm}' 장르`);
+    }
+    if (result.state && !activeStates.includes(result.state)) {
+      enableState(result.state);
+      autoEnabled.push(`'${result.state}' 상태`);
+    }
+    if (autoEnabled.length > 0) {
+      setToastMsg(`${autoEnabled.join(", ")} 필터가 선택되었습니다`);
     }
     setZoomTarget({ lat: result.la, lng: result.lo, level: 4 });
     setPendingPrfmId(result.prfmid);
